@@ -10,6 +10,7 @@ const SLOT_Z := -2.0
 const PAD_SIZE := Vector3(3.0, 0.1, 3.0)
 const SLOT_COLOR := Color(0.95, 0.75, 0.3)
 const PLACEHOLDER_COLOR := Color(0.6, 0.6, 0.65)
+const ONLINE_COLOR := Color(0.4, 0.7, 0.9)
 
 var _held: Dictionary[int, float] = {}
 var _status: Label
@@ -28,6 +29,8 @@ func _ready() -> void:
 		var zone := add_zone(Vector3(x, 0.0, SLOT_Z), PAD_SIZE, SLOT_COLOR, _slot_text(slot))
 		zone.interacted.connect(_on_slot_interacted.bind(slot))
 	add_zone(Vector3(7.0, 0.0, 2.5), PAD_SIZE, PLACEHOLDER_COLOR, "Wardrobe\nComing soon")
+	var online := add_zone(Vector3(-7.0, 0.0, 2.5), PAD_SIZE, ONLINE_COLOR, "Online\nHost or join")
+	online.interacted.connect(_on_online_interacted)
 
 
 func _spawn_point(player_id: int) -> Vector3:
@@ -53,6 +56,12 @@ func _on_slot_interacted(_player_id: int, slot: int) -> void:
 		GameFlow.new_run(slot)
 	set_process(false)
 	set_physics_process(false)   # a second press must not start the run twice
+
+
+func _on_online_interacted(_player_id: int) -> void:
+	GameFlow.open_online_menu()
+	set_process(false)
+	set_physics_process(false)   # a second press must not open it twice
 
 
 func _poll_joins(delta: float) -> void:

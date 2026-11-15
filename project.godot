@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 InputSetup="*uid://c4ay3ep4hxwj3"
 SaveManager="*res://scripts/progression/save_manager.gd"
 GameFlow="*res://scripts/progression/game_flow.gd"
+NetworkManager="*res://scripts/network/network_manager.gd"
 
 [display]
 

@@ -9,6 +9,7 @@ const MAIN_MENU_SCENE := "res://scenes/main/main_menu.tscn"
 const HUB_SCENE := "res://scenes/levels/hub.tscn"
 const JOB_SCENE := "res://scenes/levels/test_house.tscn"
 const BRIEFING_SCENE := "res://scenes/ui/briefing.tscn"
+const ONLINE_MENU_SCENE := "res://scenes/ui/online_menu.tscn"
 
 var day_time_remaining := DAY_LENGTH
 var day_clock_running := false
@@ -79,6 +80,16 @@ func finish_day() -> void:
 	SaveManager.end_day(day_total)
 	_reset_day_state()
 	_enter_day()
+
+
+## Opens the online host/join screen from the main menu.
+func open_online_menu() -> void:
+	_go(ONLINE_MENU_SCENE)
+
+
+## Returns to the main menu without touching any run.
+func open_main_menu() -> void:
+	_go(MAIN_MENU_SCENE)
 
 
 ## Ends the run (deletes its slot, keeps the profile) and returns to the main menu.
