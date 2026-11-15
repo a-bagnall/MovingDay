@@ -19,7 +19,14 @@ const MAX_STRAIN := 2.2       ## Grip further than this from the holder = auto-d
 ## back toward it, so the item's rotation swings them around and corners are hard.
 const LOCK_SLACK := 0.1       ## Distance from the grip a player can drift before being pulled back.
 const LOCK_STIFFNESS := 0.6   ## Fraction of the excess distance corrected per physics frame.
-const CARRY_SPEED_CAP := 0.7       ## Top speed multiplier while carrying even the lightest item.
+const CARRY_SPEED_CAP := 0.7       ## Top speed multiplier while carrying alone.
+const COOP_SPEED_CAP := 0.95       ## Top speed multiplier when enough players share the load.
+## Solo grip: a lone player holding something that needs two loses grip over time,
+## much faster when running or when the item swings. At zero the item falls.
+const SLIP_BASE := 0.12            ## Grip lost per second just standing there.
+const SLIP_PER_SPEED := 0.09       ## Extra per m/s the holder moves.
+const SLIP_PER_SWING := 0.25       ## Extra per rad/s the item spins.
+const SLIP_RECOVER := 0.6          ## Grip regained per second once properly staffed.
 const DAMAGE_SCALE := 0.5          ## Overall damage harshness (was 0.25).
 const FURNITURE_HIT_THRESHOLD := 0.6  ## Furniture-vs-furniture knocks count at this fraction of the threshold.
 const HOLD_GRAVITY_SCALE := 0.6   ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
@@ -36,6 +43,7 @@ var _visual: Node3D
 var _grips := PackedVector3Array()
 var _size: Vector3
 var _holders: Dictionary = {}   # grip index (int) -> Player
+var _grip_strength := 1.0       ## 1 = secure, 0 = slips free. Only drains when under-staffed.
 var _damage_cooldown := 0.0
 var _flash := 0.0
 var _material: StandardMaterial3D
@@ -195,6 +203,8 @@ func request_grab(player: Player) -> bool:
 	if best_i < 0:
 		return false
 
+	if _holders.is_empty():
+		_grip_strength = 1.0
 	_holders[best_i] = player
 	player.held_furniture = self
 	add_collision_exception_with(player)
@@ -251,8 +261,16 @@ func _physics_process(delta: float) -> void:
 
 	_update_player_speed(lift, worst_strain)
 
+	if _update_grip(delta):
+		for p in _holders.values():
+			if not drop_list.has(p):
+				drop_list.append(p)
+
 	for p in drop_list:
-		release(p)
+		if p.held_furniture == self:
+			if _grip_strength <= 0.0:
+				p.stumble()   # slipped, not just strained
+			release(p)
 
 
 ## The grip point is pulled to the holder's own position (at hold height), so the
@@ -280,10 +298,26 @@ func pull_holder(player: Player) -> void:
 		return
 
 
+## Returns true when the grip has given out and everyone should let go.
+func _update_grip(delta: float) -> bool:
+	if _holders.size() >= data.players_required:
+		_grip_strength = minf(_grip_strength + SLIP_RECOVER * delta, 1.0)
+		return false
+	var speed := 0.0
+	for p: Player in _holders.values():
+		speed = maxf(speed, Vector2(p.velocity.x, p.velocity.z).length())
+	var drain := SLIP_BASE + SLIP_PER_SPEED * speed + SLIP_PER_SWING * angular_velocity.length()
+	_grip_strength = maxf(_grip_strength - drain * delta, 0.0)
+	return _grip_strength <= 0.0
+
+
 func _update_player_speed(lift: float, strain: float) -> void:
-	# Carrying anything slows you; weight slows you further.
-	var weight_factor := mass / (float(_holders.size()) * 45.0)
-	var mult := clampf(CARRY_SPEED_CAP - weight_factor * 0.5, 0.25, CARRY_SPEED_CAP)
+	# Carrying anything slows you; weight slows you further. A full team is much
+	# faster than a lone player, because the weight is shared.
+	var teamed := _holders.size() >= 2
+	var cap := COOP_SPEED_CAP if teamed else CARRY_SPEED_CAP
+	var weight_factor := mass / (float(_holders.size()) * (70.0 if teamed else 45.0))
+	var mult := clampf(cap - weight_factor * 0.4, 0.3, cap)
 	if lift < 1.0:
 		mult = minf(mult, 0.3)   # not enough people: drag, don't lift
 	mult *= clampf(1.0 - maxf(strain - 0.8, 0.0) / 2.5, 0.25, 1.0)

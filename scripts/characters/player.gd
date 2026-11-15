@@ -133,6 +133,11 @@ func _physics_process(delta: float) -> void:
 	_interact_prev = interact_held
 
 
+## Called when the player loses their grip on something heavy.
+func stumble() -> void:
+	_stumble_left = stumble_time
+
+
 func _check_stumble(input_dir: Vector3, horizontal: Vector3) -> void:
 	if _stumble_left > 0.0 or held_furniture != null:
 		return
