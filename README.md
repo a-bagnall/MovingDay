@@ -16,4 +16,4 @@ Hold the interact button on the join screen to claim a player slot. First to joi
 | Keyboard | Arrow keys | Enter |
 | Gamepad | Left stick | A |
 
-Heavy items need two players. Press R after finishing a job to restart.
+Heavy items need two players (one player can lift them, but loses grip easily). Press R after finishing a job to restart. Press F3 for a debug overlay showing grip, damage and impact values.

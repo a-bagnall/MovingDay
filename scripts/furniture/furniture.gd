@@ -52,6 +52,10 @@ var is_delivered: bool = false
 ## False in the lobby so settling and nudges cost nothing.
 var damage_enabled: bool = true
 
+## Last notable impact (m/s of velocity change) and seconds since, for the debug overlay.
+var debug_peak_dv := 0.0
+var debug_peak_age := 99.0
+
 var _visual: Node3D
 var _grips := PackedVector3Array()
 var _size: Vector3
@@ -186,6 +190,15 @@ func _build_grips() -> void:
 
 func is_held() -> bool:
 	return not _holders.is_empty()
+
+
+func holder_count() -> int:
+	return _holders.size()
+
+
+## 0-100, how secure the current grip is.
+func grip_percent() -> int:
+	return roundi(_grip_strength * 100.0)
 
 
 func can_be_grabbed_by(player: Player) -> bool:
@@ -347,6 +360,7 @@ func _show_damage_popup(amount: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	_damage_cooldown = maxf(_damage_cooldown - delta, 0.0)
+	debug_peak_age += delta
 	_update_flash(delta)
 	_check_landing()
 
@@ -480,18 +494,25 @@ func _on_dissolved() -> void:
 # --- damage ---------------------------------------------------------------
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
-	if not damage_enabled or in_truck or _damage_cooldown > 0.0 or data == null:
+	if in_truck or data == null:
 		return
 	# dv = impulse / own mass, so a light item hit by a heavy one takes a big dv
 	# (the TV suffers, the sofa barely notices) without extra rules.
 	var threshold := data.effective_threshold()
 	var worst := 0.0
+	var peak := 0.0
 	for i in state.get_contact_count():
 		var dv := state.get_contact_impulse(i).length() / maxf(mass, 0.01)
+		peak = maxf(peak, dv)
 		var limit := threshold
 		if state.get_contact_collider_object(i) is Furniture:
 			limit *= FURNITURE_HIT_THRESHOLD   # knocking items together always hurts
 		worst = maxf(worst, dv - limit)
+	if peak > 0.3:
+		debug_peak_dv = peak       # for the F3 overlay: confirms impulses are reported
+		debug_peak_age = 0.0
+	if not damage_enabled or _damage_cooldown > 0.0:
+		return
 	if worst > 0.0:
 		_apply_damage(worst)
 

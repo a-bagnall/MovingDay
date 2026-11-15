@@ -60,6 +60,7 @@ func _ready() -> void:
 	var zone := _build_truck()
 	zone.active = false
 	add_child(IsoCamera.new())
+	add_child(DebugOverlay.new())
 	var items := _spawn_furniture()
 
 	for player_id in range(1, InputSetup.assigned_count() + 1):
