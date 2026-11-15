@@ -38,6 +38,7 @@ var _source: int
 var _interact_prev := false
 var _prev_input_dir := Vector3.ZERO
 var _stumble_left := 0.0
+var _pop_tween: Tween
 
 
 func _ready() -> void:
@@ -131,6 +132,17 @@ func _physics_process(delta: float) -> void:
 	if interact_held and not _interact_prev and can_interact:
 		_interact()
 	_interact_prev = interact_held
+
+
+## Quick squash-and-stretch, used when snapping onto a grip.
+func pop() -> void:
+	if _visual == null:
+		return
+	if _pop_tween:
+		_pop_tween.kill()
+	_visual.scale = Vector3(1.2, 0.8, 1.2)
+	_pop_tween = create_tween().set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	_pop_tween.tween_property(_visual, "scale", Vector3.ONE, 0.45)
 
 
 ## Called when the player loses their grip on something heavy.

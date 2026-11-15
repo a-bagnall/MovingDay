@@ -37,6 +37,14 @@ const FURNITURE_HIT_THRESHOLD := 0.6  ## Furniture-vs-furniture knocks count at 
 const HOLD_GRAVITY_SCALE := 0.6   ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
 const HELD_ANGULAR_DAMP := 4.0     ## Rotational drag while held; higher = less wobble and swing.
 const DISSOLVE_TIME := 0.8
+## Feedback ("pizzazz")
+const WOBBLE_START := 0.65         ## Below this grip strength the item starts to wobble.
+const WOBBLE_ANGLE := 0.24         ## Max wobble tilt in radians at zero grip.
+const LAND_SPEED := 1.5            ## Downward speed (m/s) that counts as a landing thud.
+const DUST_FULL_SPEED := 6.0       ## Landing speed that produces the biggest puff.
+
+static var _dust_mesh: SphereMesh
+static var _dust_curve: Curve
 
 var total_damage: float = 0.0
 var in_truck: bool = false
@@ -51,6 +59,10 @@ var _holders: Dictionary = {}   # grip index (int) -> Player
 var _grip_strength := 1.0       ## 1 = secure, 0 = slips free. Only drains when under-staffed.
 var _damage_cooldown := 0.0
 var _flash := 0.0
+var _time := 0.0
+var _shake := 0.0               ## Damage jitter, 1 -> 0.
+var _prev_vy := 0.0
+var _pop_tween: Tween
 var _material: StandardMaterial3D
 var _base_color := Color(0.7, 0.55, 0.4)
 
@@ -216,6 +228,8 @@ func request_grab(player: Player) -> bool:
 	player.add_collision_exception_with(self)
 	sleeping = false
 	angular_damp = HELD_ANGULAR_DAMP
+	_pop(0.8)
+	player.pop()
 	return true
 
 
@@ -232,11 +246,109 @@ func release(player: Player) -> void:
 		angular_damp = 1.5
 
 
+# --- feedback -------------------------------------------------------------
+
+func _process(delta: float) -> void:
+	if is_delivered or _visual == null:
+		return
+	_time += delta
+	# Wobble grows as grip fails, warning the players before the item drops.
+	var wobble := 0.0
+	if is_held():
+		wobble = clampf((WOBBLE_START - _grip_strength) / WOBBLE_START, 0.0, 1.0)
+	var tilt := wobble * WOBBLE_ANGLE
+	_visual.rotation = Vector3(sin(_time * 23.0) * tilt, 0.0, sin(_time * 19.0 + 1.0) * tilt)
+	_shake = maxf(_shake - delta * 4.0, 0.0)
+	_visual.position = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)) * _shake * 0.08
+
+
+## Squash-and-stretch bounce on the visual. Strength 1 is a full pop.
+func _pop(strength: float = 1.0) -> void:
+	if _visual == null or is_delivered:
+		return
+	if _pop_tween:
+		_pop_tween.kill()
+	_visual.scale = Vector3(1.0 + 0.18 * strength, 1.0 - 0.15 * strength, 1.0 + 0.18 * strength)
+	_pop_tween = create_tween().set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	_pop_tween.tween_property(_visual, "scale", Vector3.ONE, 0.45)
+
+
+## Detects the moment a falling item stops and answers with a thud: dust and a squash.
+func _check_landing() -> void:
+	var vy := linear_velocity.y
+	if not in_truck and not is_delivered and _prev_vy < -LAND_SPEED and vy > -0.5:
+		var strength := clampf(-_prev_vy / DUST_FULL_SPEED, 0.3, 1.5)
+		_spawn_dust(strength)
+		_pop(strength)
+	_prev_vy = vy
+
+
+func _spawn_dust(strength: float) -> void:
+	var parent := get_parent()
+	if parent == null:
+		return
+	if _dust_mesh == null:
+		_dust_mesh = SphereMesh.new()
+		_dust_mesh.radius = 0.12
+		_dust_mesh.height = 0.24
+		_dust_mesh.radial_segments = 6
+		_dust_mesh.rings = 3
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(0.93, 0.9, 0.82)
+		_dust_mesh.material = mat
+		_dust_curve = Curve.new()
+		_dust_curve.add_point(Vector2(0.0, 1.0))
+		_dust_curve.add_point(Vector2(1.0, 0.0))
+
+	var p := CPUParticles3D.new()
+	p.mesh = _dust_mesh
+	p.amount = int(8 + 10 * strength)
+	p.lifetime = 0.55
+	p.one_shot = true
+	p.explosiveness = 1.0
+	p.direction = Vector3.UP
+	p.spread = 85.0
+	p.gravity = Vector3(0.0, -1.5, 0.0)
+	p.initial_velocity_min = 0.8 * strength
+	p.initial_velocity_max = 2.2 * strength
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.3
+	p.scale_amount_curve = _dust_curve
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = maxf(_size.x, _size.z) * 0.35
+	parent.add_child(p)
+	p.global_position = global_position + Vector3(0.0, -_size.y * 0.5, 0.0)
+	p.emitting = true
+	get_tree().create_timer(p.lifetime + 0.3).timeout.connect(p.queue_free)
+
+
+func _show_damage_popup(amount: float) -> void:
+	var parent := get_parent()
+	if parent == null:
+		return
+	var label := Label3D.new()
+	label.text = "-$%d" % maxi(roundi(amount), 1)
+	label.modulate = Color(1.0, 0.3, 0.3)
+	label.outline_size = 10
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.pixel_size = 0.012
+	label.font_size = 44
+	parent.add_child(label)
+	label.global_position = global_position + Vector3(0.0, _size.y * 0.5 + 0.9, 0.0)
+	var tween := label.create_tween()
+	tween.tween_property(label, "global_position:y", label.global_position.y + 1.1, 0.9)
+	tween.parallel().tween_property(label, "scale", Vector3.ONE * 0.3, 0.5).set_delay(0.4)
+	tween.tween_callback(label.queue_free)
+
+
 # --- carrying physics -----------------------------------------------------
 
 func _physics_process(delta: float) -> void:
 	_damage_cooldown = maxf(_damage_cooldown - delta, 0.0)
 	_update_flash(delta)
+	_check_landing()
 
 	if _holders.is_empty():
 		return
@@ -345,6 +457,10 @@ func _update_player_speed(lift: float, strain: float) -> void:
 func deliver() -> void:
 	is_delivered = true
 	in_truck = true
+	if _pop_tween:
+		_pop_tween.kill()
+	_visual.rotation = Vector3.ZERO
+	_visual.position = Vector3.ZERO
 	remove_from_group("furniture")
 	freeze = true
 	collision_layer = 0
@@ -390,6 +506,8 @@ func _apply_damage(excess: float) -> void:
 	total_damage += amount
 	_damage_cooldown = 0.25
 	_flash = 1.0
+	_shake = 1.0
+	_show_damage_popup(amount)
 	damaged.emit(amount, total_damage)
 
 
