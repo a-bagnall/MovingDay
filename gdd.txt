@@ -17,6 +17,10 @@ Players take on removal contracts, enter procedurally generated houses, carefull
 The challenge comes from deliberately awkward character movement, physics-driven furniture handling, environmental obstacles and the need for constant cooperation.
 Players must balance speed and efficiency against the risk of damaging customer belongings.
 Between jobs, players return to their company headquarters to purchase upgrades, unlock cosmetics, improve their equipment and accept increasingly difficult contracts.
+Tone and Audience
+Moving Day is a whimsical couch co-op / lobby game in the vein of PlateUp!: easy to pick up, played together on the same sofa, and funny when it goes wrong.
+Presentation, feedback and animation should be playful and full of personality ("pizzazz"): grabbing, lifting, dropping and delivering should all feel satisfying and a little over the top.
+Failure should be amusing rather than punishing, so players laugh and immediately want another go.
 Design Inspiration
 The game takes inspiration from:
 - PlateUp! — Progression, business management, character customisation, replayability and the accessible isometric presentation.
@@ -29,6 +33,7 @@ Design Pillars
 3. Replayability: Procedurally assembled properties should make contracts feel different.
 4. Personality: Cute animal characters and cosmetic customisation should give players ownership over their characters.
 5. Progression: Players should feel that their removalist company is developing over time.
+6. Whimsy and pizzazz: The game should feel like a PlateUp!-style couch co-op experience, with juicy, cheerful feedback on every interaction.
 
 2. Visual Direction
 Camera and Perspective
@@ -170,6 +175,14 @@ Example: carrying a sofa.
 If one player moves too quickly, the furniture should rotate or swing.
 If players move in opposing directions, the object should become difficult to control.
 Dropping furniture should create consequences.
+Players are locked to the grip position they grabbed, so turning corners and passing through doorways is a coordination challenge rather than a free sidestep.
+Grabbing should snap the player to the grip with a satisfying, readable animation and feedback.
+Cooperative carrying should not feel slow: two players working together should move noticeably faster than one player struggling with the same object.
+Solo Carrying
+Some items that normally need two players can be lifted by one player, but the grip is unreliable.
+- A solo carrier loses grip easily, for example when moving fast, turning sharply, or when the object swings or collides.
+- When grip is lost the item falls, with the usual damage consequences, and the player may stumble.
+- Solo carrying is a risky shortcut that rewards confidence and punishes carelessness, and it never replaces the benefit of working together.
 Physics Implementation
 Use Godot 4's 3D physics system.
 Recommended components:
@@ -306,6 +319,24 @@ Earned money can be spent on:
 - Company upgrades.
 - Cosmetic unlocks.
 The game should use a roguelite-inspired progression structure, with increasingly difficult contracts and meaningful purchasing decisions between jobs.
+Run Structure: Days, Perks and Modifiers
+(Planned design. Not implemented yet.)
+A run is made up of consecutive days, each day being a contract.
+Sticky Objects
+- From day 3 onwards, objects stick together.
+- This creates a geometric challenge: players must move connected objects as a combined shape.
+Perks
+- Players can equip up to 2 perks at first.
+- Each perk equipped makes the game harder, trading difficulty for reward.
+Run Modifiers
+- Every n days the players choose one modifier from a "choose one" selection, similar to PlateUp!.
+- Each modifier adds extra complexity for the rest of that run.
+- Modifiers are intended to be an eventual run killer.
+End of Day Shop
+At the end of every day, players can spend the money they earned on:
+- Coffees and energy drinks: temporary stat increases that apply on use.
+- Outfit items: these earn more money through a style bonus.
+- Rare outfit items may be enchanted and add extra effects.
 
 8. Multiplayer
 The game must eventually support both local and online two-player co-op.
