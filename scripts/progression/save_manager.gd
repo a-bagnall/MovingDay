@@ -1,22 +1,13 @@
 extends Node
-## Autoload "SaveManager". Owns the active run and the persistent profile, and
-## reads and writes them as JSON in user://.
-##
-## The game saves only at day boundaries, never mid-job. begin_day(), end_day()
-## and end_run() are the only functions that write to disk. Quitting during a job
-## therefore resumes from the start of that day.
-##
-## Files: user://run_slot_N.json (N = 1..SLOT_COUNT) and user://profile.json.
-## A missing file is normal (empty slot, first launch). A corrupt or
-## wrong-version file is an error and is never silently replaced.
+## Autoload "SaveManager". Owns the active run and persistent profile, and
+## reads/writes JSON in user://. The run is committed at day boundaries only.
 
 const SLOT_COUNT := 3
 const PROFILE_PATH := "user://profile.json"
 
-## Persistent across runs. Always valid after _ready().
 var profile: ProfileState
-## The active run, or null when no run is in progress (e.g. in the hub).
 var run: RunState
+var _day_open := false
 
 
 func _ready() -> void:
@@ -41,42 +32,44 @@ func peek_run(slot: int) -> RunState:
 	return state
 
 
-## Loads an existing slot as the active run.
 func continue_run(slot: int) -> void:
 	var state := peek_run(slot)
 	assert(state != null, "continue_run: slot %d is empty" % slot)
 	run = state
+	_day_open = false
 
 
-## Starts a fresh run in `slot` in memory only. Nothing is written (and an
-## existing run in that slot is not touched) until begin_day().
+## Starts a fresh run in memory. Nothing is written until the first day begins.
 func new_run(slot: int) -> void:
-	_slot_path(slot)   # validates the slot number
+	_slot_path(slot)
 	run = RunState.new()
 	run.slot = slot
+	_day_open = false
 
 
-## Call when a day starts. Writes the run and the profile.
+## Writes the day-start snapshot once. Calls from individual house scenes are
+## harmless, so existing scene setup remains compatible with the multi-job loop.
 func begin_day() -> void:
 	assert(run != null, "begin_day called with no active run")
+	if _day_open:
+		return
 	_write_run()
 	_write_profile()
+	_day_open = true
 
 
-## Call when a day ends. `result` is the ContractTracker result dictionary; its
-## payment goes into the wallet and the day counter advances. Writes the run and
-## the profile.
+## `result` is the accumulated day summary, not an individual contract result.
 func end_day(result: Dictionary) -> void:
 	assert(run != null, "end_day called with no active run")
 	assert(result.has("payment"), "end_day: result has no 'payment'")
 	run.wallet += float(result["payment"])
 	run.day += 1
+	_day_open = false
 	_write_run()
 	_write_profile()
 
 
-## Call when a run dies. Deletes the run slot, keeps the profile, and clears the
-## active run.
+## Ends the run (deletes its slot, keeps the profile) and clears the active run.
 func end_run() -> void:
 	assert(run != null, "end_run called with no active run")
 	var path := _slot_path(run.slot)
@@ -86,6 +79,7 @@ func end_run() -> void:
 			_fail("Could not delete %s: %s" % [path, error_string(err)])
 			return
 	run = null
+	_day_open = false
 	_write_profile()
 
 
@@ -98,7 +92,7 @@ func _slot_path(slot: int) -> String:
 
 func _read_profile() -> ProfileState:
 	if not FileAccess.file_exists(PROFILE_PATH):
-		return ProfileState.new()   # first launch
+		return ProfileState.new()
 	var state := ProfileState.from_dict(_read_json(PROFILE_PATH))
 	if state == null:
 		_fail("Profile %s is invalid (see error above)" % PROFILE_PATH)
