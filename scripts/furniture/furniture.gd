@@ -15,7 +15,8 @@ signal damaged(amount: float, total: float)
 const GRIP_REACH := 0.5       ## Distance from the furniture end to where a player stands.
 const MAX_CARRY_ACCEL := 45.0
 const MAX_STRAIN := 3.5       ## Grip further than this from the holder = auto-drop.
-const HOLD_GRAVITY_SCALE := 0.25
+const HOLD_GRAVITY_SCALE := 0.6    ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
+const HELD_ANGULAR_DAMP := 4.0     ## Rotational drag while held; higher = less wobble and swing.
 const DISSOLVE_TIME := 0.8
 
 var total_damage: float = 0.0
@@ -176,7 +177,7 @@ func request_grab(player: Player) -> bool:
 	add_collision_exception_with(player)
 	player.add_collision_exception_with(self)
 	sleeping = false
-	angular_damp = 2.5
+	angular_damp = HELD_ANGULAR_DAMP
 	return true
 
 

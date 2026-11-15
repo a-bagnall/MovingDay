@@ -19,7 +19,8 @@ enum Handling { STANDARD, HEAVY, FRAGILE, AWKWARD, OVERSIZED }
 ## Optional custom grip points in local space. Empty = auto-generated from size.
 @export var grip_points: PackedVector3Array = PackedVector3Array()
 ## Carry feel. Higher stiffness = snappier, higher damping = less swing.
+## Critical damping is 2 * sqrt(stiffness) (about 14.8 here); below that the object overshoots and bobs.
 @export var carry_stiffness: float = 55.0
-@export var carry_damping: float = 11.0
+@export var carry_damping: float = 15.0
 ## Impact speed (m/s) below which contact does no damage.
 @export var damage_threshold: float = 2.0
