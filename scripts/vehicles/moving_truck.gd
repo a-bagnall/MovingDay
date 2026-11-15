@@ -6,7 +6,6 @@ class_name MovingTruck
 ## Local origin is the foot of the ramp on the ground; the truck extends along +x.
 
 const MODEL := "res://assets/vehicles/delivery-flat.fbx"
-const SHELL_SHADER := "res://assets/materials/truck_cutaway.gdshader"
 const MODEL_SCALE := 2.0
 ## Model units: length, and distance from the model origin to its rear (-Z) end.
 const MODEL_LENGTH := 3.25
@@ -24,51 +23,23 @@ const BED_HEIGHT := 1.9
 const WALL := 0.1
 const CAB_HEIGHT := 2.7
 
-## Must match the reveals array size in truck_cutaway.gdshader.
-const REVEAL_SLOTS := 2
-const REVEAL_FADE_SPEED := 4.0
-## Chest height the reveal is centred on.
-const REVEAL_HEIGHT := 0.9
-
 var zone: DeliveryZone
 
-var _shell := ShaderMaterial.new()
+var _cutaway: CutawayReveal
 var _metal := StandardMaterial3D.new()
-var _fade: Array[float] = [0.0, 0.0]
 
 
 func _ready() -> void:
-	_shell.shader = load(SHELL_SHADER)
+	var bed := AABB(Vector3(RAMP_LENGTH, FLOOR_Y - 0.1, -BED_WIDTH * 0.5),
+		Vector3(BED_LENGTH, BED_HEIGHT + 0.1, BED_WIDTH))
+	_cutaway = CutawayReveal.create(self, bed, Color(0.92, 0.93, 0.97))
+	add_child(_cutaway)
 	_metal.albedo_color = Color(0.55, 0.55, 0.6)
 	_build_model()
 	_build_ramp()
 	_build_bed()
 	_build_chassis_collision()
 	_build_zone()
-
-
-func _process(delta: float) -> void:
-	var camera := get_viewport().get_camera_3d()
-	if camera == null:
-		return
-	var viewport_size := get_viewport().get_visible_rect().size
-	var players := get_tree().get_nodes_in_group("players")
-	var reveals := PackedVector3Array()
-	reveals.resize(REVEAL_SLOTS)
-	for i in mini(players.size(), REVEAL_SLOTS):
-		var player := players[i] as Node3D
-		var target := 1.0 if _is_inside_bed(player.global_position) else 0.0
-		_fade[i] = move_toward(_fade[i], target, delta * REVEAL_FADE_SPEED)
-		var screen := camera.unproject_position(player.global_position + Vector3.UP * REVEAL_HEIGHT) / viewport_size
-		reveals[i] = Vector3(screen.x, screen.y, _fade[i])
-	_shell.set_shader_parameter("reveals", reveals)
-
-
-func _is_inside_bed(world_pos: Vector3) -> bool:
-	var p := to_local(world_pos)
-	return (p.x > RAMP_LENGTH and p.x < RAMP_LENGTH + BED_LENGTH
-		and absf(p.z) < BED_WIDTH * 0.5
-		and p.y > FLOOR_Y - 0.1 and p.y < FLOOR_Y + BED_HEIGHT)
 
 
 func _add_box(center: Vector3, size: Vector3, material: Material, collide: bool) -> StaticBody3D:
@@ -87,7 +58,7 @@ func _add_box(center: Vector3, size: Vector3, material: Material, collide: bool)
 		box.size = size
 		mesh.mesh = box
 		mesh.material_override = material
-		if material == _shell:
+		if material == _cutaway.material:
 			mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		body.add_child(mesh)
 	add_child(body)
@@ -121,11 +92,11 @@ func _build_bed() -> void:
 	var side_z := (BED_WIDTH + WALL) * 0.5
 	for side: float in [-1.0, 1.0]:
 		_add_box(Vector3(bed_center_x, wall_y, side * side_z),
-			Vector3(BED_LENGTH, BED_HEIGHT, WALL), _shell, true)
+			Vector3(BED_LENGTH, BED_HEIGHT, WALL), _cutaway.material, true)
 	_add_box(Vector3(RAMP_LENGTH + BED_LENGTH + WALL * 0.5, wall_y, 0.0),
-		Vector3(WALL, BED_HEIGHT, BED_WIDTH + 2.0 * WALL), _shell, true)
+		Vector3(WALL, BED_HEIGHT, BED_WIDTH + 2.0 * WALL), _cutaway.material, true)
 	_add_box(Vector3(RAMP_LENGTH + (BED_LENGTH + WALL) * 0.5, FLOOR_Y + BED_HEIGHT + WALL * 0.5, 0.0),
-		Vector3(BED_LENGTH + WALL, WALL, BED_WIDTH + 2.0 * WALL), _shell, true)
+		Vector3(BED_LENGTH + WALL, WALL, BED_WIDTH + 2.0 * WALL), _cutaway.material, true)
 
 
 func _build_chassis_collision() -> void:

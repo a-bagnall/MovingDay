@@ -253,8 +253,9 @@ func _update_player_speed(lift: float, strain: float) -> void:
 
 # --- delivery -------------------------------------------------------------
 
-## Permanent: the item stops being physical and dissolves, but the node stays so
-## its damage still counts toward the contract.
+## Permanent: the item stops being physical and shrinks away, but the node stays
+## so its damage still counts toward the contract. Scale only: fading via
+## transparency stuttered the game.
 func deliver() -> void:
 	is_delivered = true
 	in_truck = true
@@ -263,11 +264,9 @@ func deliver() -> void:
 	collision_layer = 0
 	collision_mask = 0
 
-	var tween := create_tween().set_parallel()
-	tween.tween_property(_visual, "scale", Vector3.ONE * 0.4, DISSOLVE_TIME)
+	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.tween_property(_visual, "scale", Vector3.ONE * 0.01, DISSOLVE_TIME)
 	tween.tween_property(_visual, "position:y", 0.5, DISSOLVE_TIME)
-	for node: GeometryInstance3D in _visual.find_children("*", "GeometryInstance3D", true, false):
-		tween.tween_property(node, "transparency", 1.0, DISSOLVE_TIME)
 	tween.finished.connect(_on_dissolved)
 
 
