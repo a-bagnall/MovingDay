@@ -24,10 +24,28 @@ func _ready() -> void:
 		var source := InputSetup.source_of(player_id)
 		_was_pressed[source] = InputSetup.is_interact_pressed(source)
 
-	_label = Label.new()
-	_label.position = Vector2(300, 160)
-	_label.add_theme_font_size_override("font_size", 28)
-	add_child(_label)
+	var root := UIKit.setup(self)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(center)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 28)
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(column)
+
+	var banner := PanelContainer.new()
+	banner.theme_type_variation = &"BannerPanel"
+	banner.custom_minimum_size = Vector2(1300, 0)
+	banner.add_child(UIKit.label("MOVING DAY!", UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
+	column.add_child(banner)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(1300, 0)
+	_label = UIKit.label("", UIKit.FONT_BODY)
+	panel.add_child(_label)
+	column.add_child(panel)
 
 
 func _process(delta: float) -> void:
@@ -78,7 +96,7 @@ func _update_countdown(delta: float) -> void:
 
 
 func _update_text() -> void:
-	var lines := PackedStringArray(["MOVING DAY!", ""])
+	var lines := PackedStringArray()
 	if InputSetup.assigned_count() < InputSetup.MAX_PLAYERS:
 		lines.append("Hold E, Enter or gamepad A to join")
 	lines.append("Press your interact button to ready up")
