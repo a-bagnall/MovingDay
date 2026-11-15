@@ -122,7 +122,7 @@ func _physics_process(delta: float) -> void:
 		_update_facing(horizontal, delta)
 	move_and_slide()
 	if held_furniture:
-		held_furniture.pull_holder(self)
+		held_furniture.pull_holder(self, delta)
 	_push_rigid_bodies()
 
 	if input_dir.length() > 0.5:

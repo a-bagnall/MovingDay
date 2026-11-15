@@ -17,8 +17,10 @@ const MAX_CARRY_ACCEL := 45.0
 const MAX_STRAIN := 2.2       ## Grip further than this from the holder = auto-drop (e.g. a player pinned by a wall). Must exceed Player.reach (1.8) or far grabs drop instantly.
 ## Players are locked to the grip point they grabbed: each frame they are pulled
 ## back toward it, so the item's rotation swings them around and corners are hard.
-const LOCK_SLACK := 0.1       ## Distance from the grip a player can drift before being pulled back.
-const LOCK_STIFFNESS := 0.6   ## Fraction of the excess distance corrected per physics frame.
+const LOCK_SLACK := 0.3       ## Distance from the grip a player can drift before being pulled back.
+const LOCK_STIFFNESS := 0.3   ## Fraction of the excess distance corrected per physics frame.
+const LOCK_MAX_SPEED := 2.5   ## Cap (m/s) on how hard the lock can drag a player.
+const GRIP_GRACE := 1.0       ## Seconds after grabbing before grip can start to slip.
 const CARRY_SPEED_CAP := 0.7       ## Top speed multiplier while carrying alone.
 const COOP_SPEED_CAP := 0.95       ## Top speed multiplier when enough players share the load.
 ## Solo grip: a lone player holding something that needs two loses grip over time,
@@ -28,10 +30,10 @@ const SLIP_PER_SPEED := 0.09       ## Extra per m/s the holder moves.
 const SLIP_PER_SWING := 0.25       ## Extra per rad/s the item spins.
 const SLIP_RECOVER := 0.6          ## Grip regained per second once properly staffed.
 ## Teams can lose grip too, but only through wild handling:
-const TEAM_SWING_FREE := 1.2       ## Spin (rad/s) a team can absorb without slipping.
-const TEAM_SLIP_PER_SWING := 0.35  ## Grip lost per second per rad/s above that.
-const TEAM_STRAIN_FREE := 0.7      ## Grip-to-holder stretch (m) a team can absorb.
-const TEAM_SLIP_PER_STRAIN := 0.5  ## Grip lost per second per metre above that.
+const TEAM_SWING_FREE := 1.8       ## Spin (rad/s) a team can absorb without slipping.
+const TEAM_SLIP_PER_SWING := 0.3   ## Grip lost per second per rad/s above that.
+const TEAM_STRAIN_FREE := 0.9      ## Grip-to-holder stretch (m) a team can absorb.
+const TEAM_SLIP_PER_STRAIN := 0.4  ## Grip lost per second per metre above that.
 const DAMAGE_SCALE := 0.5          ## Overall damage harshness (was 0.25).
 const FURNITURE_HIT_THRESHOLD := 0.6  ## Furniture-vs-furniture knocks count at this fraction of the threshold.
 const HOLD_GRAVITY_SCALE := 0.6   ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
@@ -61,6 +63,7 @@ var _grips := PackedVector3Array()
 var _size: Vector3
 var _holders: Dictionary = {}   # grip index (int) -> Player
 var _grip_strength := 1.0       ## 1 = secure, 0 = slips free. Only drains when under-staffed.
+var _grip_grace := 0.0
 var _damage_cooldown := 0.0
 var _flash := 0.0
 var _time := 0.0
@@ -127,7 +130,9 @@ func _build_visual() -> void:
 		_visual.add_child(mesh)
 
 	var label := Label3D.new()
-	label.text = "%s\n%s" % [data.display_name, _tier_text()]
+	# Say who can carry it, so it "makes sense" before anyone tries.
+	var who := "2 players" if data.players_required >= 2 else "1 player"
+	label.text = "%s\n%s - %s" % [data.display_name, _tier_text(), who]
 	label.modulate = _tier_color()
 	label.outline_size = 8
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -235,6 +240,7 @@ func request_grab(player: Player) -> bool:
 
 	if _holders.is_empty():
 		_grip_strength = 1.0
+	_grip_grace = GRIP_GRACE
 	_holders[best_i] = player
 	player.held_furniture = self
 	add_collision_exception_with(player)
@@ -381,7 +387,11 @@ func _physics_process(delta: float) -> void:
 		var target := _target_for(player, lift)
 		var point_velocity := linear_velocity + angular_velocity.cross(r)
 
-		var accel := data.carry_stiffness * (target - grip_world) - data.carry_damping * point_velocity
+		# Damp toward the holder's velocity, not toward standing still: otherwise the
+		# item trails a metre behind at running speed, which fought the grip lock
+		# and drained the grip while simply walking.
+		var accel := data.carry_stiffness * (target - grip_world) \
+			+ data.carry_damping * (player.velocity - point_velocity)
 		accel = accel.limit_length(MAX_CARRY_ACCEL)
 		apply_force(accel * mass / float(holder_count), r)
 
@@ -416,7 +426,7 @@ func _target_for(player: Player, lift: float) -> Vector3:
 ## Called by the player every physics frame after it has moved: drags the player
 ## back toward the grip point it grabbed, so it cannot walk away from the item
 ## or sidestep around it. Walls still block, which strains the grip.
-func pull_holder(player: Player) -> void:
+func pull_holder(player: Player, delta: float) -> void:
 	for i in _holders.keys():
 		if _holders[i] != player:
 			continue
@@ -425,12 +435,17 @@ func pull_holder(player: Player) -> void:
 		var err := stand - player.global_position
 		var dist := err.length()
 		if dist > LOCK_SLACK:
-			player.move_and_collide(err / dist * (dist - LOCK_SLACK) * LOCK_STIFFNESS)
+			# A rope, not a vice: gentle, and capped so it can never out-pull walking.
+			var step := minf((dist - LOCK_SLACK) * LOCK_STIFFNESS, LOCK_MAX_SPEED * delta)
+			player.move_and_collide(err / dist * step)
 		return
 
 
 ## Returns true when the grip has given out and everyone should let go.
 func _update_grip(delta: float, strain: float) -> bool:
+	if _grip_grace > 0.0:
+		_grip_grace -= delta   # settling in after the grab: no slipping yet
+		return false
 	if _holders.size() >= data.players_required:
 		# A full team is steady, but wild swinging or players pulling apart
 		# still shakes the grip loose.
