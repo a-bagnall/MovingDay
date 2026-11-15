@@ -182,6 +182,7 @@ Solo Carrying
 Some items that normally need two players can be lifted by one player, but the grip is unreliable.
 - A solo carrier loses grip easily, for example when moving fast, turning sharply, or when the object swings or collides.
 - When grip is lost the item falls, with the usual damage consequences, and the player may stumble.
+- Teams can also lose grip, though far less easily: violent spinning or players pulling in opposite directions shakes the item loose.
 - Solo carrying is a risky shortcut that rewards confidence and punishes carelessness, and it never replaces the benefit of working together.
 Physics Implementation
 Use Godot 4's 3D physics system.

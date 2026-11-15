@@ -27,6 +27,11 @@ const SLIP_BASE := 0.12            ## Grip lost per second just standing there.
 const SLIP_PER_SPEED := 0.09       ## Extra per m/s the holder moves.
 const SLIP_PER_SWING := 0.25       ## Extra per rad/s the item spins.
 const SLIP_RECOVER := 0.6          ## Grip regained per second once properly staffed.
+## Teams can lose grip too, but only through wild handling:
+const TEAM_SWING_FREE := 1.2       ## Spin (rad/s) a team can absorb without slipping.
+const TEAM_SLIP_PER_SWING := 0.35  ## Grip lost per second per rad/s above that.
+const TEAM_STRAIN_FREE := 0.7      ## Grip-to-holder stretch (m) a team can absorb.
+const TEAM_SLIP_PER_STRAIN := 0.5  ## Grip lost per second per metre above that.
 const DAMAGE_SCALE := 0.5          ## Overall damage harshness (was 0.25).
 const FURNITURE_HIT_THRESHOLD := 0.6  ## Furniture-vs-furniture knocks count at this fraction of the threshold.
 const HOLD_GRAVITY_SCALE := 0.6   ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
@@ -261,7 +266,7 @@ func _physics_process(delta: float) -> void:
 
 	_update_player_speed(lift, worst_strain)
 
-	if _update_grip(delta):
+	if _update_grip(delta, worst_strain):
 		for p in _holders.values():
 			if not drop_list.has(p):
 				drop_list.append(p)
@@ -299,10 +304,17 @@ func pull_holder(player: Player) -> void:
 
 
 ## Returns true when the grip has given out and everyone should let go.
-func _update_grip(delta: float) -> bool:
+func _update_grip(delta: float, strain: float) -> bool:
 	if _holders.size() >= data.players_required:
-		_grip_strength = minf(_grip_strength + SLIP_RECOVER * delta, 1.0)
-		return false
+		# A full team is steady, but wild swinging or players pulling apart
+		# still shakes the grip loose.
+		var shake := maxf(angular_velocity.length() - TEAM_SWING_FREE, 0.0) * TEAM_SLIP_PER_SWING \
+			+ maxf(strain - TEAM_STRAIN_FREE, 0.0) * TEAM_SLIP_PER_STRAIN
+		if shake > 0.0:
+			_grip_strength = maxf(_grip_strength - shake * delta, 0.0)
+		else:
+			_grip_strength = minf(_grip_strength + SLIP_RECOVER * delta, 1.0)
+		return _grip_strength <= 0.0
 	var speed := 0.0
 	for p: Player in _holders.values():
 		speed = maxf(speed, Vector2(p.velocity.x, p.velocity.z).length())
