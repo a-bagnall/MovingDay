@@ -21,6 +21,9 @@ const FURNITURE_MODELS := {
 ## KayKit models are oversized relative to the 1.3m player capsule.
 const FURNITURE_MODEL_SCALE := 0.6
 
+## World x of the truck ramp's foot, just outside the east exit.
+const TRUCK_FOOT_X := 7.0
+
 
 func _ready() -> void:
 	_build_environment()
@@ -116,18 +119,10 @@ func _build_house() -> void:
 
 
 func _build_truck() -> DeliveryZone:
-	var zone := DeliveryZone.new()
-	zone.size = Vector3(4.5, 2.2, 3.0)
-	zone.position = Vector3(9.5, 0.0, 0.0)
-	add_child(zone)
-
-	# Cargo bay: a flush pale floor patch plus back/side walls, open on the
-	# house side. Kept at ground level so no ramp is needed for the prototype.
-	_add_static_box(Vector3(9.5, -0.04, 0), Vector3(4.5, 0.08, 3.0), Color(0.6, 0.6, 0.65))
-	_add_static_box(Vector3(11.85, 0.6, 0), Vector3(0.2, 1.2, 3.2), Color(0.9, 0.9, 0.95))
-	_add_static_box(Vector3(9.5, 0.6, -1.6), Vector3(4.5, 1.2, 0.2), Color(0.9, 0.9, 0.95))
-	_add_static_box(Vector3(9.5, 0.6, 1.6), Vector3(4.5, 1.2, 0.2), Color(0.9, 0.9, 0.95))
-	return zone
+	var truck := MovingTruck.new()
+	truck.position = Vector3(TRUCK_FOOT_X, 0.0, 0.0)
+	add_child(truck)
+	return truck.zone
 
 
 # --- actors ---------------------------------------------------------------
