@@ -7,8 +7,8 @@ class_name MainMenu
 ## continues the saved one. The Online pad opens a small host/join panel over the
 ## room; closing it leaves the connection (and everyone in the room) as it is.
 ##
-## Jobs are not synchronised between machines yet, so a run cannot start while other
-## machines are connected. Flip ONLINE_JOBS_READY once they are.
+## Online, only the host picks the run. GameFlow then takes every machine to the
+## briefing together; no one else can join until the run is over (see GameFlow._go).
 
 const HOLD_TIME := 0.8
 const SLOT_SPACING := 5.0
@@ -17,7 +17,6 @@ const PAD_SIZE := Vector3(3.0, 0.1, 3.0)
 const SLOT_COLOR := Color(0.95, 0.75, 0.3)
 const PLACEHOLDER_COLOR := Color(0.6, 0.6, 0.65)
 const ONLINE_COLOR := Color(0.4, 0.7, 0.9)
-const ONLINE_JOBS_READY := false
 const NOTICE_TIME := 4.0
 
 var _held: Dictionary[int, float] = {}
@@ -66,9 +65,6 @@ func _slot_text(slot: int) -> String:
 
 
 func _on_slot_interacted(_player_id: int, slot: int) -> void:
-	if not ONLINE_JOBS_READY and NetworkManager.peer_count() > 1:
-		_say("Online jobs aren't ready yet - disconnect to play together on this computer")
-		return
 	if SaveManager.has_run(slot):
 		GameFlow.continue_run(slot)
 	else:

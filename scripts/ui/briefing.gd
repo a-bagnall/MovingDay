@@ -173,8 +173,7 @@ func _continue_prompt() -> String:
 
 
 func _continue() -> void:
-	set_process(false)
-	if GameFlow.current_contract != null:
-		GameFlow.launch_next_contract()
-	else:
-		GameFlow.finish_day()
+	# A client keeps running: the host may not have answered yet, so it can press again.
+	if GameFlow.is_authority():
+		set_process(false)
+	GameFlow.continue_from_briefing()

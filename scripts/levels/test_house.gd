@@ -58,6 +58,8 @@ const STAIR_COLOR := Color(0.6, 0.5, 0.4)
 
 ## Stair approaches that furniture must not be placed in.
 var _keep_clear: Array[AABB] = []
+## Numbers furniture in spawn order, so every machine agrees what "item 3" is.
+var _next_net_id := 0
 
 
 func _ready() -> void:
@@ -70,9 +72,16 @@ func _ready() -> void:
 	var items := _spawn_furniture()
 
 	for player_id in InputSetup.local_player_ids():
-		_spawn_player(player_id)
+		_spawn_player(player_id, true)
+	for player_id in NetworkManager.remote_player_ids():
+		_spawn_player(player_id, false)
 	SaveManager.begin_day()
-	_start_job(zone, items)
+	_start_job(zone, items)   # trims `items` to the job's furniture before it first waits
+	if NetworkManager.is_online():
+		var sync := JobSync.new()
+		sync.name = "JobSync"
+		add_child(sync)
+		sync.setup(items, zone)
 
 
 func _start_job(zone: DeliveryZone, items: Array[Furniture]) -> void:
@@ -271,9 +280,10 @@ func _build_truck() -> DeliveryZone:
 
 # --- actors ---------------------------------------------------------------
 
-func _spawn_player(player_id: int) -> void:
+func _spawn_player(player_id: int, local: bool) -> void:
 	var p := Player.new()
 	p.player_id = player_id
+	p.is_local = local
 	if PLAYER_MODELS.has(player_id):
 		p.model_scene = load(PLAYER_MODELS[player_id])
 	p.position = PLAYER_SPAWNS[player_id - 1]
@@ -316,6 +326,9 @@ func _make(key: String, label: String, size: Vector3, mass: float, fragility: fl
 	var f := Furniture.new()
 	f.data = d
 	f.damage_enabled = false
+	f.net_id = _next_net_id
+	_next_net_id += 1
+	f.is_puppet = NetworkManager.mode == NetworkManager.Mode.CLIENT   # the host simulates
 	if FURNITURE_MODELS.has(key):
 		f.model_scene = load(FURNITURE_MODELS[key])
 		f.model_scale = FURNITURE_MODEL_SCALE

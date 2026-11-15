@@ -1,6 +1,11 @@
 extends Node
 ## Autoload "GameFlow". Owns the in-memory day loop and scene transitions.
 ## A day contains multiple contracts; saves are written only at day boundaries.
+##
+## Online, only the host runs the loop. Every scene change it makes is sent to the
+## clients together with a snapshot of the run and the day (so their briefing, hub and
+## job screens show the same thing), and the clients change scene with it. Clients that
+## want something to happen (continue past the briefing) ask the host.
 
 const DAY_LENGTH := 10.0
 const HUB_EVERY_N_DAYS := 3
@@ -10,6 +15,8 @@ const HUB_SCENE := "res://scenes/levels/hub.tscn"
 const JOB_SCENE := "res://scenes/levels/test_house.tscn"
 const BRIEFING_SCENE := "res://scenes/ui/briefing.tscn"
 
+const _SCENES := [MAIN_MENU_SCENE, HUB_SCENE, JOB_SCENE, BRIEFING_SCENE]
+
 var day_time_remaining := DAY_LENGTH
 var day_clock_running := false
 var day_contract_count := 0
@@ -17,10 +24,25 @@ var day_total: Dictionary = {}
 var previous_contract_result: Dictionary = {}
 var current_contract: Contract
 
+## Counts scene changes. Messages about a scene carry it, so a late one from the
+## previous scene is recognised and ignored.
+var scene_serial := 0
+
+var _peer_serial: Dictionary = {}   # host: peer id -> last scene serial that peer reported loaded
+
+
+func _ready() -> void:
+	NetworkManager.connection_lost.connect(_on_connection_lost)
+
 
 func _process(delta: float) -> void:
 	if day_clock_running:
 		day_time_remaining = maxf(0.0, day_time_remaining - delta)
+
+
+## True when this machine decides what happens next: offline, or the host.
+func is_authority() -> bool:
+	return not NetworkManager.is_online() or NetworkManager.is_host()
 
 
 ## True if the hub comes before `day` (never before day 1).
@@ -69,6 +91,17 @@ func finish_contract(result: Dictionary) -> void:
 	else:
 		current_contract = null
 	_go(BRIEFING_SCENE)
+
+
+## Called by the briefing when a player presses continue. A client asks the host.
+func continue_from_briefing() -> void:
+	if is_authority():
+		if current_contract != null:
+			launch_next_contract()
+		else:
+			finish_day()
+	elif NetworkManager.can_send():
+		_request_continue.rpc_id(1, scene_serial)
 
 
 ## Called by the end-of-day briefing after the team dismisses the day summary.
@@ -132,5 +165,121 @@ func _accumulate_day_result(result: Dictionary) -> void:
 
 
 func _go(path: String) -> void:
+	scene_serial += 1
+	# A run in progress cannot take newcomers; the main menu can.
+	NetworkManager.set_accepting_connections(path == MAIN_MENU_SCENE)
+	if NetworkManager.is_host() and NetworkManager.peer_count() > 1:
+		_net_go.rpc(path, scene_serial, _snapshot())
+	_change_scene(path)
+
+
+func _change_scene(path: String) -> void:
 	var err := get_tree().change_scene_to_file(path)
 	assert(err == OK, "Could not load %s: %s" % [path, error_string(err)])
+
+
+# --- online ---------------------------------------------------------------
+
+## Host: sends the run (wallet, boosts) to the clients again, e.g. after a hub purchase.
+func sync_run() -> void:
+	if NetworkManager.is_host() and NetworkManager.peer_count() > 1 and SaveManager.run != null:
+		_net_run.rpc(SaveManager.run.to_dict())
+
+
+## Client: call once the new scene is loaded, so the host starts sending it state.
+func report_scene_ready() -> void:
+	if NetworkManager.mode == NetworkManager.Mode.CLIENT and NetworkManager.can_send():
+		_client_scene_ready.rpc_id(1, scene_serial)
+
+
+## Host: whether `peer_id` has loaded the scene that is current now.
+func is_peer_ready(peer_id: int) -> bool:
+	return _peer_serial.get(peer_id, -1) == scene_serial
+
+
+func _snapshot() -> Dictionary:
+	return {
+		"run": SaveManager.run.to_dict() if SaveManager.run != null else {},
+		"day_time_remaining": day_time_remaining,
+		"day_clock_running": day_clock_running,
+		"day_contract_count": day_contract_count,
+		"day_total": day_total.duplicate(true),
+		"previous": previous_contract_result.duplicate(true),
+		"contract": _contract_to_dict(current_contract),
+	}
+
+
+func _apply_snapshot(snapshot: Dictionary) -> void:
+	var run_data: Dictionary = snapshot.get("run", {})
+	if run_data.is_empty():
+		SaveManager.clear_mirror()
+	else:
+		SaveManager.mirror_run(run_data)
+	day_time_remaining = float(snapshot.get("day_time_remaining", DAY_LENGTH))
+	day_clock_running = bool(snapshot.get("day_clock_running", false))
+	day_contract_count = int(snapshot.get("day_contract_count", 0))
+	day_total = snapshot.get("day_total", {})
+	previous_contract_result = snapshot.get("previous", {})
+	current_contract = _contract_from_dict(snapshot.get("contract", {}))
+
+
+static func _contract_to_dict(contract: Contract) -> Dictionary:
+	if contract == null:
+		return {}
+	return {
+		"contract_number": contract.contract_number,
+		"client_name": contract.client_name,
+		"letter_text": contract.letter_text,
+		"payout": contract.payout,
+	}
+
+
+static func _contract_from_dict(data: Dictionary) -> Contract:
+	if data.is_empty():
+		return null
+	var contract := Contract.new()
+	contract.contract_number = int(data.get("contract_number", 1))
+	contract.client_name = str(data.get("client_name", ""))
+	contract.letter_text = str(data.get("letter_text", ""))
+	contract.payout = float(data.get("payout", 0.0))
+	return contract
+
+
+## Host -> clients: change scene, and bring the run and the day along.
+@rpc("authority", "call_remote", "reliable")
+func _net_go(path: String, serial: int, snapshot: Dictionary) -> void:
+	if not _SCENES.has(path):
+		return
+	scene_serial = serial
+	_apply_snapshot(snapshot)
+	_change_scene(path)
+
+
+## Host -> clients: the run changed without a scene change.
+@rpc("authority", "call_remote", "reliable")
+func _net_run(data: Dictionary) -> void:
+	SaveManager.mirror_run(data)
+
+
+## Client -> host: "I have loaded scene `serial`".
+@rpc("any_peer", "call_remote", "reliable")
+func _client_scene_ready(serial: int) -> void:
+	if NetworkManager.is_host():
+		_peer_serial[multiplayer.get_remote_sender_id()] = serial
+
+
+## Client -> host: "someone here pressed continue on the briefing".
+@rpc("any_peer", "call_remote", "reliable")
+func _request_continue(serial: int) -> void:
+	if NetworkManager.is_host() and serial == scene_serial and get_tree().current_scene is Briefing:
+		continue_from_briefing()
+
+
+## The host went away: drop its run and go back to the main menu.
+func _on_connection_lost() -> void:
+	SaveManager.clear_mirror()
+	_reset_day_state()
+	_peer_serial.clear()
+	var scene := get_tree().current_scene
+	if scene == null or scene.scene_file_path != MAIN_MENU_SCENE:
+		_change_scene(MAIN_MENU_SCENE)

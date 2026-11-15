@@ -111,7 +111,8 @@ func _process(delta: float) -> void:
 	_damage_value.add_theme_color_override("font_color",
 		UIKit.PINK if damage > 0.5 else UIKit.CREAM)
 
-	if delivered >= required.size() and required.size() > 0:
+	# The host decides when the job is over; clients follow it to the briefing.
+	if delivered >= required.size() and required.size() > 0 and GameFlow.is_authority():
 		_finish()
 
 

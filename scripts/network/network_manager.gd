@@ -12,8 +12,12 @@ extends Node
 ## status says so.
 ##
 ## Also streams each machine's player positions and button state to the others so
-## walkable areas (main menu, hub) can show everyone. Synchronised jobs (furniture,
-## damage, contracts) build on this in a later step.
+## walkable areas (main menu, hub) and jobs can show everyone.
+##
+## Jobs are host-authoritative: the host simulates the furniture and streams its state
+## to the clients (see JobSync); clients send back grab/drop requests and shoves. This
+## script only carries those messages. Everything is an RPC on this autoload, so a
+## message that arrives while a scene is still loading is simply dropped, never an error.
 
 signal roster_changed
 ## Client only: connected to the host (the roster follows).
@@ -26,6 +30,14 @@ signal connection_lost
 signal port_status_changed
 ## Another machine's player states arrived: [id, position, velocity, facing, move, interact] each.
 signal player_states_received(peer_id: int, states: Array)
+## Host only: a client asked to grab (furniture_id >= 0) or drop (-1) with one of its players.
+signal interact_requested(peer_id: int, player_id: int, furniture_id: int)
+## Host only: a client shoved furniture. `pushes` is [[furniture id, impulse], ...].
+signal pushes_received(peer_id: int, pushes: Array)
+## Client only: the host's snapshot of the job: [scene serial, sequence number, furniture states].
+signal job_state_received(payload: Array)
+## Client only: the host says one of this machine's players lost its grip.
+signal stumble_received(player_id: int)
 
 const DEFAULT_PORT := 7777
 
@@ -133,6 +145,44 @@ func set_local_player_count(count: int) -> void:
 func send_player_states(states: Array) -> void:
 	if mode != Mode.OFFLINE and _is_connected() and _roster.size() > 1:
 		_receive_player_states.rpc(states)
+
+
+## Host: sends the job's furniture state to one client. Unreliable on purpose: the
+## next snapshot supersedes a lost one.
+func send_job_state(peer_id: int, payload: Array) -> void:
+	if mode == Mode.HOST and _is_connected():
+		_receive_job_state.rpc_id(peer_id, payload)
+
+
+## Client: asks the host to grab furniture `furniture_id` (or drop what is held, with -1)
+## for the local player `player_id`.
+func send_interact_request(player_id: int, furniture_id: int) -> void:
+	if mode == Mode.CLIENT and _is_connected():
+		_request_interact.rpc_id(1, player_id, furniture_id)
+
+
+## Client: tells the host about shoves: [[furniture id, impulse], ...].
+func send_pushes(pushes: Array) -> void:
+	if mode == Mode.CLIENT and _is_connected():
+		_receive_pushes.rpc_id(1, pushes)
+
+
+## Host: tells the client that owns `player_id` that it lost its grip.
+func send_stumble(peer_id: int, player_id: int) -> void:
+	if mode == Mode.HOST and _is_connected():
+		_receive_stumble.rpc_id(peer_id, player_id)
+
+
+## Whether messages can be sent right now (online and the connection is up).
+func can_send() -> bool:
+	return mode != Mode.OFFLINE and _is_connected()
+
+
+## Host: whether new machines may join. A run in progress cannot take newcomers,
+## so GameFlow turns this off outside the main menu.
+func set_accepting_connections(accepting: bool) -> void:
+	if mode == Mode.HOST and multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.refuse_new_connections = not accepting
 
 
 func _is_connected() -> bool:
@@ -332,6 +382,28 @@ func _count_result(granted: int) -> void:
 @rpc("any_peer", "call_remote", "unreliable")
 func _receive_player_states(states: Array) -> void:
 	player_states_received.emit(multiplayer.get_remote_sender_id(), states)
+
+
+@rpc("authority", "call_remote", "unreliable")
+func _receive_job_state(payload: Array) -> void:
+	job_state_received.emit(payload)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_interact(player_id: int, furniture_id: int) -> void:
+	if mode == Mode.HOST:
+		interact_requested.emit(multiplayer.get_remote_sender_id(), player_id, furniture_id)
+
+
+@rpc("any_peer", "call_remote", "unreliable")
+func _receive_pushes(pushes: Array) -> void:
+	if mode == Mode.HOST:
+		pushes_received.emit(multiplayer.get_remote_sender_id(), pushes)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _receive_stumble(player_id: int) -> void:
+	stumble_received.emit(player_id)
 
 
 # --- connection events (client side) ----------------------------------------

@@ -7,6 +7,9 @@ const PROFILE_PATH := "user://profile.json"
 
 var profile: ProfileState
 var run: RunState
+## True on a client playing in the host's run: `run` is a copy the host sent, and
+## nothing is ever written to disk from it.
+var is_mirror := false
 var _day_open := false
 
 
@@ -37,6 +40,23 @@ func continue_run(slot: int) -> void:
 	assert(state != null, "continue_run: slot %d is empty" % slot)
 	run = state
 	_day_open = false
+
+
+## Client: replaces the run with the host's copy. Never saved.
+func mirror_run(data: Dictionary) -> void:
+	var state := RunState.from_dict(data)
+	assert(state != null, "mirror_run: the host sent an invalid run")
+	is_mirror = true
+	run = state
+	_day_open = true   # begin_day() then has nothing to do
+
+
+## Client: forgets the host's run (the host ended it, or the connection went).
+func clear_mirror() -> void:
+	if is_mirror:
+		is_mirror = false
+		run = null
+		_day_open = false
 
 
 ## Starts a fresh run in memory. Nothing is written until the first day begins.
@@ -101,10 +121,14 @@ func _read_profile() -> ProfileState:
 
 
 func _write_run() -> void:
+	if is_mirror:
+		return
 	_write_json(_slot_path(run.slot), run.to_dict())
 
 
 func _write_profile() -> void:
+	if is_mirror:
+		return
 	_write_json(PROFILE_PATH, profile.to_dict())
 
 

@@ -55,6 +55,11 @@ var _interact_prev := false
 var _prev_input_dir := Vector3.ZERO
 var _stumble_left := 0.0
 var _pop_tween: Tween
+## Online client: until this tick (msec), ignore the host saying this player holds
+## something. Set when the player lets go, so the host's not-yet-updated state does
+## not make it grab again.
+var net_ignore_holds_until := 0
+
 var _net_position := Vector3.ZERO   # latest state from the owning machine (remote players)
 var _net_yaw := 0.0
 var _has_net_state := false
@@ -178,12 +183,15 @@ func net_state() -> Array:
 
 
 ## Remote players: remember where the owning machine says this player is, and feed
-## its input so interact presses reach the area's zones.
-func apply_net_state(position_: Vector3, yaw: float, move: Vector2, interact: bool) -> void:
+## its input so interact presses reach the area's zones. `velocity_` is kept so the
+## furniture this player carries (simulated on the host) can match its speed.
+func apply_net_state(position_: Vector3, yaw: float, move: Vector2, interact: bool,
+		velocity_ := Vector3.ZERO) -> void:
 	_net_position = position_
 	_net_yaw = yaw
 	input.move = move
 	input.interact = interact
+	velocity = velocity_
 	_has_net_state = true
 
 
@@ -212,6 +220,14 @@ func pop() -> void:
 
 ## Called when the player loses their grip on something heavy.
 func stumble() -> void:
+	if not is_local:
+		# The host simulates the carrying, so it learns of a slip first; the machine
+		# that owns this player has to be told.
+		if NetworkManager.is_host():
+			var sync := get_tree().get_first_node_in_group("job_sync") as JobSync
+			if sync:
+				sync.notify_stumble(player_id)
+		return
 	_stumble_left = stumble_time
 
 
@@ -258,14 +274,42 @@ func _push_rigid_bodies() -> void:
 			push.y = 0.0
 			# Mass-proportional per-frame impulse: players shove light things
 			# easily and barely nudge heavy ones.
-			rb.apply_central_impulse(push * Vector3(velocity.x, 0.0, velocity.z).length() * rb.mass * push_strength)
+			var impulse := push * Vector3(velocity.x, 0.0, velocity.z).length() * rb.mass * push_strength
+			var item := body as Furniture
+			if item != null and item.is_puppet:
+				# On a client the furniture is a copy; the host does the shoving.
+				var sync := get_tree().get_first_node_in_group("job_sync") as JobSync
+				if sync:
+					sync.queue_push(item.net_id, impulse)
+			else:
+				rb.apply_central_impulse(impulse)
 
 
 func _interact() -> void:
+	if not GameFlow.is_authority():
+		_request_interact()
+		return
 	if held_furniture:
 		held_furniture.release(self)
 		return
+	var best := _nearest_grabbable()
+	if best:
+		best.request_grab(self)
 
+
+## Online client: the host owns the furniture, so grabbing and dropping are requests.
+func _request_interact() -> void:
+	if held_furniture:
+		NetworkManager.send_interact_request(player_id, -1)
+		held_furniture.release(self)   # let go at once; the host's state catches up
+		net_ignore_holds_until = Time.get_ticks_msec() + 400
+		return
+	var best := _nearest_grabbable()
+	if best:
+		NetworkManager.send_interact_request(player_id, best.net_id)
+
+
+func _nearest_grabbable() -> Furniture:
 	var best: Furniture = null
 	var best_dist := reach
 	for node in get_tree().get_nodes_in_group("furniture"):
@@ -276,5 +320,4 @@ func _interact() -> void:
 		if d < best_dist:
 			best_dist = d
 			best = f
-	if best:
-		best.request_grab(self)
+	return best

@@ -62,9 +62,11 @@ func _process(delta: float) -> void:
 			_countdown = COUNTDOWN_TIME
 		_countdown -= delta
 		if _countdown <= 0.0:
-			GameFlow.start_job()
-			set_process(false)
-			return
+			if GameFlow.is_authority():
+				GameFlow.start_job()
+				set_process(false)
+				return
+			_countdown = 0.0   # a client waits for the host to start the job
 	else:
 		_countdown = -1.0
 
@@ -107,6 +109,7 @@ func _on_shop_interacted(_player_id: int, item_id: String) -> void:
 
 	SaveManager.run.wallet -= price
 	_set_notice("Bought %s for %s" % [item.name, UIKit.money(price)])
+	GameFlow.sync_run()   # other machines show the new wallet
 
 
 func _set_notice(message: String) -> void:

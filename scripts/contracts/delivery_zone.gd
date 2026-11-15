@@ -31,7 +31,8 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if not active:
+	# Online, the host decides what is delivered; clients are told (see JobSync).
+	if not active or not GameFlow.is_authority():
 		return
 	var dwell: Dictionary[Furniture, float] = {}
 	for body in get_overlapping_bodies():

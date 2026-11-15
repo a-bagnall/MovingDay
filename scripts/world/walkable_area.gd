@@ -83,7 +83,7 @@ func _on_player_states_received(peer_id: int, states: Array) -> void:
 		# Only accept states for players that peer actually owns.
 		if player == null or player.is_local or not allowed.has(player.player_id):
 			continue
-		player.apply_net_state(state[1], state[3], state[4], state[5])
+		player.apply_net_state(state[1], state[3], state[4], state[5], state[2])
 
 
 func _find_player(player_id: int) -> Player:

@@ -20,4 +20,6 @@ Heavy items need two players (one player can lift them, but loses grip easily). 
 
 ## Online (LAN or internet)
 
-In the main menu, stand on the blue **Online** pad and press interact to open a small host/join panel (close it with Close or Esc; that does not disconnect). One player hosts, the others join by typing the host's address. Everyone connected appears in the main menu room, and each machine can have several local players: any mix of local and online players works, up to 4 in total. Only the host picks a run. **Jobs are not synchronised between machines yet**, so a run cannot start while other machines are connected.
+In the main menu, stand on the blue **Online** pad and press interact to open a small host/join panel (close it with Close or Esc; that does not disconnect). One player hosts, the others join by typing the host's address. Everyone connected appears in the main menu room, and each machine can have several local players: any mix of local and online players works, up to 4 in total. Only the host picks a run; everyone is then taken to the briefing and through the run together (any player can press continue on the briefing, only the host starts a job from the hub).
+
+In a job the host runs the furniture physics, grip, damage and delivery, and streams the result to the other machines; each machine moves its own players. It is built for a LAN or a low-latency connection: carrying feels best when the round trip is short. Nobody can join while a run is in progress, so connect everyone in the main menu first. A run is saved only on the host.

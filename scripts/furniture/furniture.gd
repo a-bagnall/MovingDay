@@ -12,6 +12,15 @@ signal damaged(amount: float, total: float)
 @export var model_scene: PackedScene
 @export var model_scale: float = 1.0
 
+## Online, on a client: this item is a copy that follows the host's state. It is never
+## simulated here (no physics, grip or damage); set before the item enters the tree.
+var is_puppet := false
+## The same on every machine (the level numbers items in spawn order): how the
+## network refers to this item.
+var net_id := -1
+## The speed multiplier the host gave this item's holders; sent so clients can apply it.
+var net_speed_mult := 1.0
+
 const GRIP_REACH := 0.65      ## Distance from the furniture end to where a player stands.
 const MAX_CARRY_ACCEL := 45.0
 const MAX_STRAIN := 2.2       ## Grip further than this from the holder = auto-drop (e.g. a player pinned by a wall). Must exceed Player.reach (1.8) or far grabs drop instantly.
@@ -72,6 +81,10 @@ var _prev_vy := 0.0
 var _pop_tween: Tween
 var _material: StandardMaterial3D
 var _base_color := Color(0.7, 0.55, 0.4)
+var _net_position := Vector3.ZERO   # puppet: latest state from the host
+var _net_rotation := Quaternion.IDENTITY
+var _net_lin_vel := Vector3.ZERO
+var _has_net_state := false
 
 
 func _ready() -> void:
@@ -96,6 +109,13 @@ func _ready() -> void:
 	_build_visual()
 	_build_collision()
 	_build_grips()
+
+	if is_puppet:
+		# Moved only by the host's state; still solid, so local players cannot walk through.
+		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		freeze = true
+		contact_monitor = false
+		max_contacts_reported = 0
 
 
 # --- construction ---------------------------------------------------------
@@ -295,7 +315,7 @@ func _pop(strength: float = 1.0) -> void:
 
 ## Detects the moment a falling item stops and answers with a thud: dust and a squash.
 func _check_landing() -> void:
-	var vy := linear_velocity.y
+	var vy := _net_lin_vel.y if is_puppet else linear_velocity.y
 	if not in_truck and not is_delivered and _prev_vy < -LAND_SPEED and vy > -0.5:
 		var strength := clampf(-_prev_vy / DUST_FULL_SPEED, 0.3, 1.5)
 		_spawn_dust(strength)
@@ -367,11 +387,17 @@ func _show_damage_popup(amount: float) -> void:
 # --- carrying physics -----------------------------------------------------
 
 func _physics_process(delta: float) -> void:
+	if is_puppet:
+		_puppet_step(delta)
+		return
 	_damage_cooldown = maxf(_damage_cooldown - delta, 0.0)
 	debug_peak_age += delta
 	_update_flash(delta)
 	_check_landing()
 
+	for i in _holders.keys():
+		if not is_instance_valid(_holders[i]):
+			_holders.erase(i)   # a player left mid-carry
 	if _holders.is_empty():
 		return
 
@@ -476,6 +502,7 @@ func _update_player_speed(lift: float, strain: float) -> void:
 	if lift < 1.0:
 		mult = minf(mult, 0.3)   # not enough people: drag, don't lift
 	mult *= clampf(1.0 - maxf(strain - 0.8, 0.0) / 2.5, 0.25, 1.0)
+	net_speed_mult = mult
 	for player in _holders.values():
 		(player as Player).speed_multiplier = mult
 
@@ -508,10 +535,108 @@ func _on_dissolved() -> void:
 	process_mode = Node.PROCESS_MODE_DISABLED
 
 
+# --- online ---------------------------------------------------------------
+
+## Host: this item's state for the clients:
+## [id, position, rotation, linear velocity, angular velocity, holders, speed multiplier,
+## grip percent, total damage, delivered]. `holders` is [[grip index, player id], ...].
+func net_state() -> Array:
+	var holders: Array = []
+	for i in _holders:
+		var holder: Variant = _holders[i]
+		if is_instance_valid(holder):
+			holders.append([i, (holder as Player).player_id])
+	return [net_id, global_position, global_transform.basis.get_rotation_quaternion(),
+		linear_velocity, angular_velocity, holders, net_speed_mult, grip_percent(),
+		total_damage, is_delivered]
+
+
+## Client: takes the host's state. `players` maps player id -> Player on this machine.
+func net_apply_state(state: Array, players: Dictionary) -> void:
+	if state.size() < 10 or is_delivered:
+		return
+	_net_position = state[1]
+	_net_rotation = state[2]
+	_net_lin_vel = state[3]
+	if not _has_net_state:
+		global_transform = Transform3D(Basis(_net_rotation), _net_position)   # first state: snap
+		_has_net_state = true
+
+	var holders := {}
+	for entry in state[5]:
+		var holder := players.get(entry[1]) as Player
+		if holder != null:
+			holders[int(entry[0])] = holder
+	net_speed_mult = float(state[6])
+	_net_set_holders(holders)
+	_grip_strength = float(state[7]) / 100.0
+	_net_take_damage(float(state[8]))
+	if state[9]:
+		deliver()
+
+
+## Makes the holders match the host's. Only bookkeeping: the host does the physics.
+func _net_set_holders(holders: Dictionary) -> void:
+	for i in _holders.keys():
+		var old: Variant = _holders[i]
+		var valid := is_instance_valid(old)
+		if valid and holders.get(i) == old:
+			continue
+		_holders.erase(i)
+		if valid and (old as Player).held_furniture == self:
+			var player := old as Player
+			player.held_furniture = null
+			player.speed_multiplier = 1.0
+			remove_collision_exception_with(player)
+			player.remove_collision_exception_with(self)
+	for i in holders:
+		if _holders.has(i):
+			continue
+		var holder: Player = holders[i]
+		if holder.is_local and Time.get_ticks_msec() < holder.net_ignore_holds_until:
+			continue   # just let go; the host has not caught up yet
+		_holders[i] = holder
+		holder.held_furniture = self
+		add_collision_exception_with(holder)
+		holder.add_collision_exception_with(self)
+		if holder.is_local:
+			holder.pop()
+			_pop(0.8)
+	for holder: Player in _holders.values():
+		holder.speed_multiplier = net_speed_mult
+
+
+## Shows damage the host reported, the way a local knock would.
+func _net_take_damage(total: float) -> void:
+	if total > total_damage + 0.01:
+		var amount := total - total_damage
+		_flash = 1.0
+		_shake = 1.0
+		_show_damage_popup(amount)
+		damaged.emit(amount, total)
+	total_damage = total
+
+
+## Puppet: glide toward the last state the host sent.
+func _puppet_step(delta: float) -> void:
+	_update_flash(delta)
+	_check_landing()
+	if not _has_net_state or is_delivered:
+		return
+	var xform := global_transform
+	if xform.origin.distance_to(_net_position) > 3.0:
+		xform = Transform3D(Basis(_net_rotation), _net_position)   # far behind: snap
+	else:
+		var weight := 1.0 - exp(-20.0 * delta)
+		var rotation_ := xform.basis.get_rotation_quaternion().slerp(_net_rotation, weight)
+		xform = Transform3D(Basis(rotation_), xform.origin.lerp(_net_position, weight))
+	global_transform = xform
+
+
 # --- damage ---------------------------------------------------------------
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
-	if in_truck or data == null:
+	if is_puppet or in_truck or data == null:
 		return
 	# dv = impulse / own mass, so a light item hit by a heavy one takes a big dv
 	# (the TV suffers, the sofa barely notices) without extra rules.
