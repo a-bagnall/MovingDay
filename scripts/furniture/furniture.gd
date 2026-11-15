@@ -15,7 +15,10 @@ signal damaged(amount: float, total: float)
 const GRIP_REACH := 0.5       ## Distance from the furniture end to where a player stands.
 const MAX_CARRY_ACCEL := 45.0
 const MAX_STRAIN := 3.5       ## Grip further than this from the holder = auto-drop.
-const HOLD_GRAVITY_SCALE := 0.6    ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
+const CARRY_SPEED_CAP := 0.7       ## Top speed multiplier while carrying even the lightest item.
+const DAMAGE_SCALE := 0.5          ## Overall damage harshness (was 0.25).
+const FURNITURE_HIT_THRESHOLD := 0.6  ## Furniture-vs-furniture knocks count at this fraction of the threshold.
+const HOLD_GRAVITY_SCALE := 0.6   ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
 const HELD_ANGULAR_DAMP := 4.0     ## Rotational drag while held; higher = less wobble and swing.
 const DISSOLVE_TIME := 0.8
 
@@ -91,13 +94,29 @@ func _build_visual() -> void:
 		_visual.add_child(mesh)
 
 	var label := Label3D.new()
-	label.text = data.display_name
+	label.text = "%s\n%s" % [data.display_name, _tier_text()]
+	label.modulate = _tier_color()
+	label.outline_size = 8
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.pixel_size = 0.01
 	label.font_size = 28
-	label.position.y = _size.y * 0.5 + 0.4
+	label.position.y = _size.y * 0.5 + 0.5
 	_visual.add_child(label)
+
+
+func _tier_text() -> String:
+	match data.tier():
+		FurnitureData.Tier.FRAGILE: return "FRAGILE"
+		FurnitureData.Tier.HEAVY: return "HEAVY - hits hard"
+		_: return "sturdy"
+
+
+func _tier_color() -> Color:
+	match data.tier():
+		FurnitureData.Tier.FRAGILE: return Color(1.0, 0.35, 0.35)
+		FurnitureData.Tier.HEAVY: return Color(1.0, 0.7, 0.2)
+		_: return Color(0.6, 0.95, 0.6)
 
 
 func _model_bounds(model: Node3D) -> AABB:
@@ -243,8 +262,9 @@ func _target_for(player: Player, lift: float) -> Vector3:
 
 
 func _update_player_speed(lift: float, strain: float) -> void:
+	# Carrying anything slows you; weight slows you further.
 	var weight_factor := mass / (float(_holders.size()) * 45.0)
-	var mult := clampf(1.0 - weight_factor * 0.7, 0.35, 1.0)
+	var mult := clampf(CARRY_SPEED_CAP - weight_factor * 0.5, 0.25, CARRY_SPEED_CAP)
 	if lift < 1.0:
 		mult = minf(mult, 0.3)   # not enough people: drag, don't lift
 	mult *= clampf(1.0 - maxf(strain - 0.8, 0.0) / 2.5, 0.25, 1.0)
@@ -281,16 +301,24 @@ func _on_dissolved() -> void:
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if not damage_enabled or in_truck or _damage_cooldown > 0.0 or data == null:
 		return
-	var worst_dv := 0.0
+	# dv = impulse / own mass, so a light item hit by a heavy one takes a big dv
+	# (the TV suffers, the sofa barely notices) without extra rules.
+	var threshold := data.effective_threshold()
+	var worst := 0.0
 	for i in state.get_contact_count():
 		var dv := state.get_contact_impulse(i).length() / maxf(mass, 0.01)
-		worst_dv = maxf(worst_dv, dv)
-	if worst_dv > data.damage_threshold:
-		_apply_damage(worst_dv)
+		var limit := threshold
+		if state.get_contact_collider_object(i) is Furniture:
+			limit *= FURNITURE_HIT_THRESHOLD   # knocking items together always hurts
+		worst = maxf(worst, dv - limit)
+	if worst > 0.0:
+		_apply_damage(worst)
 
 
-func _apply_damage(impact: float) -> void:
-	var raw := (impact - data.damage_threshold) * data.fragility * data.value * 0.25
+## `excess` is how far the impact went past the damage threshold (m/s).
+func _apply_damage(excess: float) -> void:
+	# Sturdy things still take a little; fragile things take a lot.
+	var raw := excess * maxf(data.fragility, 0.1) * data.value * DAMAGE_SCALE
 	var amount := minf(raw, data.value - total_damage)
 	if amount <= 0.01:
 		return

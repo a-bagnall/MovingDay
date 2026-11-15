@@ -22,5 +22,26 @@ enum Handling { STANDARD, HEAVY, FRAGILE, AWKWARD, OVERSIZED }
 ## Critical damping is 2 * sqrt(stiffness) (about 14.8 here); below that the object overshoots and bobs.
 @export var carry_stiffness: float = 55.0
 @export var carry_damping: float = 15.0
-## Impact speed (m/s) below which contact does no damage.
-@export var damage_threshold: float = 2.0
+## Impact speed (m/s) below which contact does no damage. Negative = derive from
+## fragility (see effective_threshold), so fragile items break on gentle knocks.
+@export var damage_threshold: float = -1.0
+
+## What the player should understand at a glance:
+## FRAGILE = breaks easily, STURDY = tough and light, HEAVY = tough but wrecks what it hits.
+enum Tier { STURDY, HEAVY, FRAGILE }
+const FRAGILE_AT := 0.5
+const HEAVY_AT_MASS := 30.0
+
+
+func tier() -> Tier:
+	if fragility >= FRAGILE_AT:
+		return Tier.FRAGILE
+	if mass >= HEAVY_AT_MASS:
+		return Tier.HEAVY
+	return Tier.STURDY
+
+
+func effective_threshold() -> float:
+	if damage_threshold >= 0.0:
+		return damage_threshold
+	return lerpf(2.5, 0.5, fragility)
