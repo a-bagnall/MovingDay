@@ -1,0 +1,257 @@
+extends RigidBody3D
+class_name Furniture
+## A physics-driven removable object. Carrying never teleports the body: each
+## holder pulls a grip point toward a spot in front of them with a damped
+## spring force, so speed/direction mismatches between players swing and
+## twist the object.
+
+signal damaged(amount: float, total: float)
+
+@export var data: FurnitureData
+## Optional model. Its footprint should match data.size (collision uses data.size).
+@export var model_scene: PackedScene
+
+const GRIP_REACH := 0.5       ## Distance from the furniture end to where a player stands.
+const MAX_CARRY_ACCEL := 45.0
+const MAX_STRAIN := 3.5       ## Grip further than this from the holder = auto-drop.
+const HOLD_GRAVITY_SCALE := 0.25
+
+var total_damage: float = 0.0
+var in_truck: bool = false
+
+var _grips := PackedVector3Array()
+var _holders: Dictionary = {}   # grip index (int) -> Player
+var _damage_cooldown := 0.0
+var _flash := 0.0
+var _material: StandardMaterial3D
+var _base_color := Color(0.7, 0.55, 0.4)
+
+
+func _ready() -> void:
+	if data == null:
+		data = FurnitureData.new()
+	add_to_group("furniture")
+	collision_layer = 1 << 2
+	collision_mask = (1 << 0) | (1 << 1) | (1 << 2)
+	mass = data.mass
+	linear_damp = 0.4
+	angular_damp = 1.5
+	contact_monitor = true
+	max_contacts_reported = 6
+	can_sleep = true
+
+	var pm := PhysicsMaterial.new()
+	pm.friction = 0.8
+	pm.bounce = 0.05
+	physics_material_override = pm
+
+	_build_collision()
+	_build_visual()
+	_build_grips()
+
+
+# --- construction ---------------------------------------------------------
+
+func _build_collision() -> void:
+	var shape := BoxShape3D.new()
+	shape.size = data.size
+	var col := CollisionShape3D.new()
+	col.shape = shape
+	add_child(col)
+
+
+func _build_visual() -> void:
+	if model_scene:
+		add_child(model_scene.instantiate())
+	else:
+		var mesh := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = data.size
+		mesh.mesh = box
+		_material = StandardMaterial3D.new()
+		_base_color = _color_for_handling()
+		_material.albedo_color = _base_color
+		mesh.material_override = _material
+		add_child(mesh)
+
+	var label := Label3D.new()
+	label.text = data.display_name
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.pixel_size = 0.01
+	label.font_size = 28
+	label.position.y = data.size.y * 0.5 + 0.4
+	add_child(label)
+
+
+func _color_for_handling() -> Color:
+	match data.handling:
+		FurnitureData.Handling.HEAVY: return Color(0.45, 0.45, 0.55)
+		FurnitureData.Handling.FRAGILE: return Color(0.6, 0.85, 0.9)
+		FurnitureData.Handling.AWKWARD: return Color(0.8, 0.6, 0.3)
+		FurnitureData.Handling.OVERSIZED: return Color(0.6, 0.4, 0.7)
+		_: return Color(0.72, 0.58, 0.42)
+
+
+func _build_grips() -> void:
+	if data.grip_points.size() >= 2:
+		_grips = data.grip_points
+		return
+	var half := data.size * 0.5
+	if data.size.x >= data.size.z:
+		var x := half.x + GRIP_REACH
+		_grips = PackedVector3Array([Vector3(-x, 0, 0), Vector3(x, 0, 0)])
+	else:
+		var z := half.z + GRIP_REACH
+		_grips = PackedVector3Array([Vector3(0, 0, -z), Vector3(0, 0, z)])
+
+
+# --- grabbing -------------------------------------------------------------
+
+func is_held() -> bool:
+	return not _holders.is_empty()
+
+
+func can_be_grabbed_by(player: Player) -> bool:
+	return player.held_furniture == null and _free_grip_indices().size() > 0
+
+
+func _free_grip_indices() -> Array[int]:
+	var out: Array[int] = []
+	for i in _grips.size():
+		if not _holders.has(i):
+			out.append(i)
+	return out
+
+
+func distance_to_nearest_free_grip(from: Vector3) -> float:
+	var best := INF
+	for i in _free_grip_indices():
+		var g := to_global(_grips[i])
+		best = minf(best, Vector2(g.x - from.x, g.z - from.z).length())
+	return best
+
+
+func request_grab(player: Player) -> bool:
+	var best_i := -1
+	var best_d := INF
+	for i in _free_grip_indices():
+		var g := to_global(_grips[i])
+		var d := Vector2(g.x - player.global_position.x, g.z - player.global_position.z).length()
+		if d < best_d:
+			best_d = d
+			best_i = i
+	if best_i < 0:
+		return false
+
+	_holders[best_i] = player
+	player.held_furniture = self
+	add_collision_exception_with(player)
+	player.add_collision_exception_with(self)
+	sleeping = false
+	angular_damp = 2.5
+	return true
+
+
+func release(player: Player) -> void:
+	for i in _holders.keys():
+		if _holders[i] == player:
+			_holders.erase(i)
+	player.held_furniture = null
+	player.speed_multiplier = 1.0
+	remove_collision_exception_with(player)
+	player.remove_collision_exception_with(self)
+	if _holders.is_empty():
+		gravity_scale = 1.0
+		angular_damp = 1.5
+
+
+# --- carrying physics -----------------------------------------------------
+
+func _physics_process(delta: float) -> void:
+	_damage_cooldown = maxf(_damage_cooldown - delta, 0.0)
+	_update_flash(delta)
+
+	if _holders.is_empty():
+		return
+
+	var holder_count := _holders.size()
+	var lift := clampf(float(holder_count) / float(data.players_required), 0.0, 1.0)
+	gravity_scale = lerpf(1.0, HOLD_GRAVITY_SCALE, lift)
+
+	var drop_list: Array[Player] = []
+	var worst_strain := 0.0
+
+	for i in _holders.keys():
+		var player: Player = _holders[i]
+		var grip_world := to_global(_grips[i])
+		var r := grip_world - global_position
+		var target := _target_for(player, lift)
+		var point_velocity := linear_velocity + angular_velocity.cross(r)
+
+		var accel := data.carry_stiffness * (target - grip_world) - data.carry_damping * point_velocity
+		accel = accel.limit_length(MAX_CARRY_ACCEL)
+		apply_force(accel * mass / float(holder_count), r)
+
+		var strain := grip_world.distance_to(target)
+		worst_strain = maxf(worst_strain, strain)
+		if strain > MAX_STRAIN:
+			drop_list.append(player)
+
+	_update_player_speed(lift, worst_strain)
+
+	for p in drop_list:
+		release(p)
+
+
+func _target_for(player: Player, lift: float) -> Vector3:
+	var to_center := global_position - player.global_position
+	to_center.y = 0.0
+	var dir := to_center.normalized() if to_center.length() > 0.01 else player.get_facing()
+	var hold_height := maxf(data.size.y * 0.5 + 0.15, 0.7)
+	var target := player.global_position + dir * GRIP_REACH
+	target.y = player.global_position.y + lerpf(0.1, hold_height, lift)
+	return target
+
+
+func _update_player_speed(lift: float, strain: float) -> void:
+	var weight_factor := mass / (float(_holders.size()) * 45.0)
+	var mult := clampf(1.0 - weight_factor * 0.7, 0.35, 1.0)
+	if lift < 1.0:
+		mult = minf(mult, 0.3)   # not enough people: drag, don't lift
+	mult *= clampf(1.0 - maxf(strain - 0.8, 0.0) / 2.5, 0.25, 1.0)
+	for player in _holders.values():
+		(player as Player).speed_multiplier = mult
+
+
+# --- damage ---------------------------------------------------------------
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if in_truck or _damage_cooldown > 0.0 or data == null:
+		return
+	var worst_dv := 0.0
+	for i in state.get_contact_count():
+		var dv := state.get_contact_impulse(i).length() / maxf(mass, 0.01)
+		worst_dv = maxf(worst_dv, dv)
+	if worst_dv > data.damage_threshold:
+		_apply_damage(worst_dv)
+
+
+func _apply_damage(impact: float) -> void:
+	var raw := (impact - data.damage_threshold) * data.fragility * data.value * 0.25
+	var amount := minf(raw, data.value - total_damage)
+	if amount <= 0.01:
+		return
+	total_damage += amount
+	_damage_cooldown = 0.25
+	_flash = 1.0
+	damaged.emit(amount, total_damage)
+
+
+func _update_flash(delta: float) -> void:
+	_flash = maxf(_flash - delta * 3.0, 0.0)
+	if _material == null:
+		return
+	var ratio := clampf(total_damage / maxf(data.value, 0.01), 0.0, 1.0)
+	var worn := _base_color.lerp(Color(0.35, 0.1, 0.1), ratio * 0.6)
+	_material.albedo_color = worn.lerp(Color.RED, _flash)
