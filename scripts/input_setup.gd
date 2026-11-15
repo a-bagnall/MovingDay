@@ -6,7 +6,7 @@ extends Node
 
 const KB_WASD := -1
 const KB_ARROWS := -2
-const MAX_PLAYERS := 2
+const MAX_PLAYERS := 4
 const JOY_DEADZONE := 0.2
 
 const ACTIONS := ["up", "down", "left", "right", "interact"]

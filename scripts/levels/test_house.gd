@@ -31,7 +31,10 @@ const TRUCK_FOOT_X := 7.0
 const SETTLE_TIME := 1.5
 
 ## Spawn point per player id (index = id - 1).
-const PLAYER_SPAWNS := [Vector3(-3.0, 0.1, 2.5), Vector3(-2.0, 0.1, 2.5)]
+const PLAYER_SPAWNS := [
+	Vector3(-3.0, 0.1, 2.5), Vector3(-2.0, 0.1, 2.5),
+	Vector3(-4.0, 0.1, 2.5), Vector3(-5.0, 0.1, 2.5),
+]
 
 ## Floor-to-floor height, floor slab thickness, and the clear height under the loft.
 const FLOOR_HEIGHT := 2.4

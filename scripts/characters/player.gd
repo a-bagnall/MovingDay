@@ -7,6 +7,9 @@ class_name Player
 ## direction reversals, and an occasional stumble on abrupt reversals at speed.
 
 @export var player_id: int = 1
+## True if this machine's InputSetup drives the player; false when something else
+## (the network layer) fills `input` each frame.
+@export var is_local := true
 ## Optional GLB/PackedScene for the character model. Should face -Z.
 @export var model_scene: PackedScene
 @export var model_scale: float = 1.0
@@ -27,6 +30,17 @@ class_name Player
 ## Camera yaw the input is rotated by, so "up" on the stick is "up" on screen.
 const CAMERA_YAW := PI / 4.0
 
+## Body colour per player id (id 1 is the first entry).
+const PLAYER_COLORS := [
+	Color(0.9, 0.45, 0.2),
+	Color(0.25, 0.55, 0.9),
+	Color(0.35, 0.75, 0.4),
+	Color(0.9, 0.8, 0.25),
+]
+
+## This frame's input. Filled from InputSetup for local players.
+var input := PlayerInput.new()
+
 ## Set each frame by the furniture being carried (1.0 = unencumbered).
 var speed_multiplier: float = 1.0
 var shop_speed_multiplier: float = 1.0
@@ -44,13 +58,15 @@ var _pop_tween: Tween
 
 
 func _ready() -> void:
-	_source = InputSetup.source_of(player_id)
+	if is_local:
+		_source = InputSetup.source_of(player_id)
 	if SaveManager.run != null:
 		if SaveManager.run.speed_boost_day == SaveManager.run.day:
 			shop_speed_multiplier = SaveManager.run.speed_boost
 		if SaveManager.run.acceleration_boost_day == SaveManager.run.day:
 			shop_acceleration_multiplier = SaveManager.run.acceleration_boost
-	_interact_prev = InputSetup.is_interact_pressed(_source)
+	_poll_input()
+	_interact_prev = input.interact
 	add_to_group("players")
 	collision_layer = 1 << 1          # layer 2: players
 	collision_mask = (1 << 0) | (1 << 1) | (1 << 2)  # world, players, furniture
@@ -88,7 +104,7 @@ func _build_visual() -> void:
 	mesh.mesh = capsule
 	mesh.position.y = 0.65
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.9, 0.45, 0.2) if player_id == 1 else Color(0.25, 0.55, 0.9)
+	mat.albedo_color = PLAYER_COLORS[(player_id - 1) % PLAYER_COLORS.size()]
 	mesh.material_override = mat
 	_visual.add_child(mesh)
 
@@ -99,9 +115,18 @@ func _build_visual() -> void:
 	_visual.add_child(nose)
 
 
+## Reads this machine's input source into `input`. Remote players are skipped:
+## their input is set from outside.
+func _poll_input() -> void:
+	if not is_local:
+		return
+	input.move = InputSetup.get_move(_source)
+	input.interact = InputSetup.is_interact_pressed(_source)
+
+
 func _physics_process(delta: float) -> void:
-	var input := InputSetup.get_move(_source)
-	var input_dir := Vector3(input.x, 0.0, input.y).rotated(Vector3.UP, CAMERA_YAW)
+	_poll_input()
+	var input_dir := Vector3(input.move.x, 0.0, input.move.y).rotated(Vector3.UP, CAMERA_YAW)
 
 	_stumble_left = maxf(_stumble_left - delta, 0.0)
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
@@ -135,10 +160,9 @@ func _physics_process(delta: float) -> void:
 	if input_dir.length() > 0.5:
 		_prev_input_dir = input_dir.normalized()
 
-	var interact_held := InputSetup.is_interact_pressed(_source)
-	if interact_held and not _interact_prev and can_interact:
+	if input.interact and not _interact_prev and can_interact:
 		_interact()
-	_interact_prev = interact_held
+	_interact_prev = input.interact
 
 
 ## Quick squash-and-stretch, used when snapping onto a grip.
