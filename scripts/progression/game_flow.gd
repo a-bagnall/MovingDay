@@ -2,7 +2,7 @@ extends Node
 ## Autoload "GameFlow". Owns the in-memory day loop and scene transitions.
 ## A day contains multiple contracts; saves are written only at day boundaries.
 
-const DAY_LENGTH := 600.0
+const DAY_LENGTH := 10.0
 const HUB_EVERY_N_DAYS := 3
 
 const MAIN_MENU_SCENE := "res://scenes/main/main_menu.tscn"
