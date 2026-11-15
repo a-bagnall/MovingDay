@@ -22,7 +22,14 @@ const KEYS := {
 	},
 }
 
-var _players: Array[int] = []   # index = player_id - 1, value = source
+var _players: Array[int] = []   # source of each local player, in join order
+## Player id of each local player (same order as _players). Offline that is 1, 2, 3...
+## Online the host hands the ids out (see NetworkManager), so a machine's players can
+## be, say, 1 and 4. 0 means "joined, but the host has not given an id yet".
+var _ids: Array[int] = []
+## True while a typing UI is open: keyboard sources then read as idle, so typing
+## an address does not walk anyone around. Gamepads are unaffected.
+var ui_captured := false
 
 
 func _ready() -> void:
@@ -51,24 +58,63 @@ func describe(source: int) -> String:
 			return "%s (A)" % Input.get_joy_name(source)
 
 
-func assign(source: int) -> void:
+## Claims a player for `source`. Offline the id is its position in join order; when
+## `awaiting_id` is true (online) it stays 0 until the host assigns one.
+func assign(source: int, awaiting_id := false) -> void:
 	_players.append(source)
+	_ids.append(0 if awaiting_id else _players.size())
 
 
 func is_assigned(source: int) -> bool:
 	return _players.has(source)
 
 
+## Number of local players, including any still waiting for an id.
 func assigned_count() -> int:
 	return _players.size()
 
 
+## Ids of the local players that have one. Use this, not 1..assigned_count(), to
+## spawn or poll local players, because online ids are not consecutive.
+func local_player_ids() -> Array[int]:
+	var out: Array[int] = []
+	for id in _ids:
+		if id > 0:
+			out.append(id)
+	return out
+
+
+## The input source driving player `player_id` (one of this machine's players).
 func source_of(player_id: int) -> int:
-	return _players[player_id - 1]
+	var index := _ids.find(player_id)
+	assert(index >= 0, "Player %d is not a local player" % player_id)
+	return _players[index]
+
+
+## Online: takes the ids the host granted this machine, in order. Local players
+## beyond the list keep waiting.
+func apply_ids(ids: Array[int]) -> void:
+	for i in _players.size():
+		_ids[i] = ids[i] if i < ids.size() else 0
+
+
+## Drops the newest local players until only `count` remain (the host had no room).
+func truncate(count: int) -> void:
+	while _players.size() > maxi(count, 0):
+		_players.pop_back()
+		_ids.pop_back()
+
+
+## Back to offline numbering (1, 2, 3...), e.g. after leaving an online session.
+func reset_ids() -> void:
+	for i in _ids.size():
+		_ids[i] = i + 1
 
 
 func get_move(source: int) -> Vector2:
 	if source < 0:
+		if ui_captured:
+			return Vector2.ZERO
 		return Input.get_vector(
 			_action(source, "left"), _action(source, "right"),
 			_action(source, "up"), _action(source, "down"))
@@ -80,6 +126,8 @@ func get_move(source: int) -> Vector2:
 
 func is_interact_pressed(source: int) -> bool:
 	if source < 0:
+		if ui_captured:
+			return false
 		return Input.is_action_pressed(_action(source, "interact"))
 	return Input.is_joy_button_pressed(source, JOY_BUTTON_A)
 

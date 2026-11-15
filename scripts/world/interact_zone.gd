@@ -9,6 +9,10 @@ signal interacted(player_id: int)
 const ZONE_HEIGHT := 2.0
 const PAD_ALPHA := 0.55
 
+## True for pads whose effect is private to the machine that pressed them (opening
+## a menu). Other pads are decided by the host alone when playing online.
+var local_only := false
+
 var _label: Label3D
 
 

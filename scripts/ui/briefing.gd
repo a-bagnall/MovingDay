@@ -18,7 +18,7 @@ func _ready() -> void:
 	# Briefings are non-play time: never consume the day clock while reading
 	# the debrief, the next contract, or the end-of-day summary.
 	GameFlow.day_clock_running = false
-	for player_id in range(1, InputSetup.assigned_count() + 1):
+	for player_id in InputSetup.local_player_ids():
 		var source := InputSetup.source_of(player_id)
 		_was_pressed[source] = InputSetup.is_interact_pressed(source)
 	_build_ui()
@@ -152,7 +152,7 @@ func _build_next_panel() -> Control:
 
 
 func _poll_interact() -> void:
-	for player_id in range(1, InputSetup.assigned_count() + 1):
+	for player_id in InputSetup.local_player_ids():
 		var source := InputSetup.source_of(player_id)
 		var pressed := InputSetup.is_interact_pressed(source)
 		var was_pressed: bool = _was_pressed.get(source, true)

@@ -55,6 +55,9 @@ var _interact_prev := false
 var _prev_input_dir := Vector3.ZERO
 var _stumble_left := 0.0
 var _pop_tween: Tween
+var _net_position := Vector3.ZERO   # latest state from the owning machine (remote players)
+var _net_yaw := 0.0
+var _has_net_state := false
 
 
 func _ready() -> void:
@@ -126,6 +129,9 @@ func _poll_input() -> void:
 
 func _physics_process(delta: float) -> void:
 	_poll_input()
+	if not is_local:
+		_follow_remote(delta)
+		return
 	var input_dir := Vector3(input.move.x, 0.0, input.move.y).rotated(Vector3.UP, CAMERA_YAW)
 
 	_stumble_left = maxf(_stumble_left - delta, 0.0)
@@ -163,6 +169,34 @@ func _physics_process(delta: float) -> void:
 	if input.interact and not _interact_prev and can_interact:
 		_interact()
 	_interact_prev = input.interact
+
+
+## State to stream to other machines: [id, position, velocity, facing, move, interact].
+func net_state() -> Array:
+	return [player_id, global_position, velocity, _visual.rotation.y if _visual else 0.0,
+		input.move, input.interact]
+
+
+## Remote players: remember where the owning machine says this player is, and feed
+## its input so interact presses reach the area's zones.
+func apply_net_state(position_: Vector3, yaw: float, move: Vector2, interact: bool) -> void:
+	_net_position = position_
+	_net_yaw = yaw
+	input.move = move
+	input.interact = interact
+	_has_net_state = true
+
+
+## Remote players are not simulated here; they glide to the last reported state.
+func _follow_remote(delta: float) -> void:
+	if not _has_net_state:
+		return
+	if global_position.distance_to(_net_position) > 4.0:
+		global_position = _net_position   # far behind (just spawned): snap
+	else:
+		global_position = global_position.lerp(_net_position, 1.0 - exp(-16.0 * delta))
+	if _visual:
+		_visual.rotation.y = lerp_angle(_visual.rotation.y, _net_yaw, 1.0 - exp(-14.0 * delta))
 
 
 ## Quick squash-and-stretch, used when snapping onto a grip.

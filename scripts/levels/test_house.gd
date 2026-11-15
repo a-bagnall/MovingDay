@@ -69,7 +69,7 @@ func _ready() -> void:
 	add_child(DebugOverlay.new())
 	var items := _spawn_furniture()
 
-	for player_id in range(1, InputSetup.assigned_count() + 1):
+	for player_id in InputSetup.local_player_ids():
 		_spawn_player(player_id)
 	SaveManager.begin_day()
 	_start_job(zone, items)

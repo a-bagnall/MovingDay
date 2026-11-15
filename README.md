@@ -17,3 +17,7 @@ The game starts in the main menu. Hold the interact button there to claim a play
 | Gamepad | Left stick | A |
 
 Heavy items need two players (one player can lift them, but loses grip easily). Press interact on the results screen to continue. Press F3 for a debug overlay showing grip, damage and impact values.
+
+## Online (LAN or internet)
+
+In the main menu, stand on the blue **Online** pad and press interact to open a small host/join panel (close it with Close or Esc; that does not disconnect). One player hosts, the others join by typing the host's address. Everyone connected appears in the main menu room, and each machine can have several local players: any mix of local and online players works, up to 4 in total. Only the host picks a run. **Jobs are not synchronised between machines yet**, so a run cannot start while other machines are connected.
