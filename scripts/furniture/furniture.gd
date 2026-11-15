@@ -21,6 +21,8 @@ const DISSOLVE_TIME := 0.8
 var total_damage: float = 0.0
 var in_truck: bool = false
 var is_delivered: bool = false
+## False in the lobby so settling and nudges cost nothing.
+var damage_enabled: bool = true
 
 var _visual: Node3D
 var _grips := PackedVector3Array()
@@ -277,7 +279,7 @@ func _on_dissolved() -> void:
 # --- damage ---------------------------------------------------------------
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
-	if in_truck or _damage_cooldown > 0.0 or data == null:
+	if not damage_enabled or in_truck or _damage_cooldown > 0.0 or data == null:
 		return
 	var worst_dv := 0.0
 	for i in state.get_contact_count():

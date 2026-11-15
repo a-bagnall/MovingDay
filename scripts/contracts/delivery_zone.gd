@@ -10,6 +10,8 @@ const DELIVER_DELAY := 1.0
 @export var size: Vector3 = Vector3(3.0, 2.2, 4.5)
 
 var delivered_items: Array[Furniture] = []
+## False in the lobby: nothing counts as delivered.
+var active := true
 
 var _dwell: Dictionary[Furniture, float] = {}
 
@@ -29,6 +31,8 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if not active:
+		return
 	var dwell: Dictionary[Furniture, float] = {}
 	for body in get_overlapping_bodies():
 		var f := body as Furniture

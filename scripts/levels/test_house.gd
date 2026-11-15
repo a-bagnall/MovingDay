@@ -24,24 +24,32 @@ const FURNITURE_MODEL_SCALE := 0.6
 ## World x of the truck ramp's foot, just outside the east exit.
 const TRUCK_FOOT_X := 7.0
 
+## Spawn point per player id (index = id - 1).
+const PLAYER_SPAWNS := [Vector3(-3.0, 0.1, 2.5), Vector3(-2.0, 0.1, 2.5)]
+
 
 func _ready() -> void:
 	_build_environment()
 	_build_house()
 	var zone := _build_truck()
+	zone.active = false
 	add_child(IsoCamera.new())
 	var items := _spawn_furniture()
 
-	if InputSetup.assigned_count() >= InputSetup.MAX_PLAYERS:
-		_start_job(zone, items)
-		return
-	var join := JoinScreen.new()
-	join.all_joined.connect(_start_job.bind(zone, items))
-	add_child(join)
+	for player_id in range(1, InputSetup.assigned_count() + 1):
+		_spawn_player(player_id)
+	var lobby := Lobby.new()
+	lobby.player_joined.connect(_spawn_player)
+	lobby.started.connect(_start_job.bind(zone, items))
+	add_child(lobby)
 
 
 func _start_job(zone: DeliveryZone, items: Array[Furniture]) -> void:
-	_spawn_players()
+	for player: Player in get_tree().get_nodes_in_group("players"):
+		player.can_interact = true
+	for item in items:
+		item.damage_enabled = true
+	zone.active = true
 	var tracker := ContractTracker.new()
 	add_child(tracker)
 	tracker.setup(zone, items)
@@ -127,15 +135,14 @@ func _build_truck() -> DeliveryZone:
 
 # --- actors ---------------------------------------------------------------
 
-func _spawn_players() -> void:
-	var spawns := [Vector3(-3.0, 0.1, 2.5), Vector3(-2.0, 0.1, 2.5)]
-	for i in 2:
-		var p := Player.new()
-		p.player_id = i + 1
-		if PLAYER_MODELS.has(i + 1):
-			p.model_scene = load(PLAYER_MODELS[i + 1])
-		p.position = spawns[i]
-		add_child(p)
+func _spawn_player(player_id: int) -> void:
+	var p := Player.new()
+	p.player_id = player_id
+	p.can_interact = false
+	if PLAYER_MODELS.has(player_id):
+		p.model_scene = load(PLAYER_MODELS[player_id])
+	p.position = PLAYER_SPAWNS[player_id - 1]
+	add_child(p)
 
 
 func _spawn_furniture() -> Array[Furniture]:
@@ -166,6 +173,7 @@ func _make(key: String, label: String, size: Vector3, mass: float, fragility: fl
 
 	var f := Furniture.new()
 	f.data = d
+	f.damage_enabled = false
 	if FURNITURE_MODELS.has(key):
 		f.model_scene = load(FURNITURE_MODELS[key])
 		f.model_scale = FURNITURE_MODEL_SCALE

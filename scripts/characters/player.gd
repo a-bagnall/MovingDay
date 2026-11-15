@@ -30,6 +30,8 @@ const CAMERA_YAW := PI / 4.0
 ## Set each frame by the furniture being carried (1.0 = unencumbered).
 var speed_multiplier: float = 1.0
 var held_furniture: Furniture = null
+## False while in the lobby: players can move but not grab.
+var can_interact := true
 
 var _visual: Node3D
 var _source: int
@@ -121,7 +123,7 @@ func _physics_process(delta: float) -> void:
 		_prev_input_dir = input_dir.normalized()
 
 	var interact_held := InputSetup.is_interact_pressed(_source)
-	if interact_held and not _interact_prev:
+	if interact_held and not _interact_prev and can_interact:
 		_interact()
 	_interact_prev = interact_held
 
