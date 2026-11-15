@@ -12,9 +12,13 @@ signal damaged(amount: float, total: float)
 @export var model_scene: PackedScene
 @export var model_scale: float = 1.0
 
-const GRIP_REACH := 0.5       ## Distance from the furniture end to where a player stands.
+const GRIP_REACH := 0.65      ## Distance from the furniture end to where a player stands.
 const MAX_CARRY_ACCEL := 45.0
-const MAX_STRAIN := 3.5       ## Grip further than this from the holder = auto-drop.
+const MAX_STRAIN := 2.2       ## Grip further than this from the holder = auto-drop (e.g. a player pinned by a wall). Must exceed Player.reach (1.8) or far grabs drop instantly.
+## Players are locked to the grip point they grabbed: each frame they are pulled
+## back toward it, so the item's rotation swings them around and corners are hard.
+const LOCK_SLACK := 0.1       ## Distance from the grip a player can drift before being pulled back.
+const LOCK_STIFFNESS := 0.6   ## Fraction of the excess distance corrected per physics frame.
 const CARRY_SPEED_CAP := 0.7       ## Top speed multiplier while carrying even the lightest item.
 const DAMAGE_SCALE := 0.5          ## Overall damage harshness (was 0.25).
 const FURNITURE_HIT_THRESHOLD := 0.6  ## Furniture-vs-furniture knocks count at this fraction of the threshold.
@@ -251,14 +255,29 @@ func _physics_process(delta: float) -> void:
 		release(p)
 
 
+## The grip point is pulled to the holder's own position (at hold height), so the
+## item follows where the player actually is.
 func _target_for(player: Player, lift: float) -> Vector3:
-	var to_center := global_position - player.global_position
-	to_center.y = 0.0
-	var dir := to_center.normalized() if to_center.length() > 0.01 else player.get_facing()
 	var hold_height := maxf(_size.y * 0.5 + 0.15, 0.7)
-	var target := player.global_position + dir * GRIP_REACH
+	var target := player.global_position
 	target.y = player.global_position.y + lerpf(0.1, hold_height, lift)
 	return target
+
+
+## Called by the player every physics frame after it has moved: drags the player
+## back toward the grip point it grabbed, so it cannot walk away from the item
+## or sidestep around it. Walls still block, which strains the grip.
+func pull_holder(player: Player) -> void:
+	for i in _holders.keys():
+		if _holders[i] != player:
+			continue
+		var stand := to_global(_grips[i])
+		stand.y = player.global_position.y
+		var err := stand - player.global_position
+		var dist := err.length()
+		if dist > LOCK_SLACK:
+			player.move_and_collide(err / dist * (dist - LOCK_SLACK) * LOCK_STIFFNESS)
+		return
 
 
 func _update_player_speed(lift: float, strain: float) -> void:

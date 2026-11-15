@@ -115,8 +115,13 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y -= gravity * delta
 
-	_update_facing(horizontal, delta)
+	if held_furniture:
+		_face_point(held_furniture.global_position, delta)
+	else:
+		_update_facing(horizontal, delta)
 	move_and_slide()
+	if held_furniture:
+		held_furniture.pull_holder(self)
 	_push_rigid_bodies()
 
 	if input_dir.length() > 0.5:
@@ -144,6 +149,16 @@ func _update_facing(horizontal: Vector3, delta: float) -> void:
 		return
 	var target_angle := atan2(-horizontal.x, -horizontal.z)
 	_visual.rotation.y = lerp_angle(_visual.rotation.y, target_angle, clampf(turn_speed * delta, 0.0, 1.0))
+
+
+## While carrying, always face the item so the player looks like they are gripping it.
+func _face_point(point: Vector3, delta: float) -> void:
+	var to := point - global_position
+	to.y = 0.0
+	if to.length() < 0.05:
+		return
+	var target_angle := atan2(-to.x, -to.z)
+	_visual.rotation.y = lerp_angle(_visual.rotation.y, target_angle, clampf(turn_speed * 1.5 * delta, 0.0, 1.0))
 
 
 func get_facing() -> Vector3:
