@@ -79,7 +79,7 @@ func _build_ui() -> void:
 	var hint := PanelContainer.new()
 	hint.theme_type_variation = &"NotePanel"
 	hint.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	hint.add_child(UIKit.label("Interact: grab / drop", UIKit.FONT_SMALL,
+	hint.add_child(UIKit.label("Grab / drop: %s" % UIKit.INTERACT_KEYS, UIKit.FONT_SMALL,
 		HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel"))
 	column.add_child(hint)
 
@@ -109,7 +109,7 @@ func _process(delta: float) -> void:
 	_time_value.text = UIKit.format_time(elapsed)
 	_day_value.text = UIKit.format_time(GameFlow.day_time_remaining)
 	_damage_value.add_theme_color_override("font_color",
-		Color("ffb3a3") if damage > 0.5 else UIKit.CREAM)
+		UIKit.PINK if damage > 0.5 else UIKit.CREAM)
 
 	if delivered >= required.size() and required.size() > 0:
 		_finish()

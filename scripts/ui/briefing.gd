@@ -4,7 +4,6 @@ class_name Briefing
 ## the next client's letter, or the day summary when the day clock has expired.
 
 const TYPEWRITER_CHARS_PER_SECOND := 48.0
-const CONTRACT_FONT: Font = preload("res://assets/fonts/XTypewriter_Font_0_96/TrueType (.ttf)/XTypewriter-Regular.ttf")
 
 var _letter: Label
 var _typewriter_text := ""
@@ -50,7 +49,7 @@ func _build_ui() -> void:
 
 	var banner := PanelContainer.new()
 	banner.theme_type_variation = &"BannerPanel"
-	banner.custom_minimum_size = Vector2(2850, 0)
+	banner.custom_minimum_size = Vector2(2700, 0)
 	banner.add_child(UIKit.label("DISPATCH OFFICE", UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
 	column.add_child(banner)
 
@@ -70,7 +69,7 @@ func _build_ui() -> void:
 	var prompt := PanelContainer.new()
 	prompt.theme_type_variation = &"ButtonPanel"
 	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_continue_label = UIKit.label("Press interact to skip the letter", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
+	_continue_label = UIKit.label("Press %s to skip the letter" % UIKit.INTERACT_KEYS, UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
 	prompt.add_child(_continue_label)
 	column.add_child(prompt)
 
@@ -78,13 +77,13 @@ func _build_ui() -> void:
 func _contract_label(text: String, size: int = UIKit.FONT_BODY,
 		align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> Label:
 	var label := UIKit.label(text, size, align)
-	label.add_theme_font_override("font", CONTRACT_FONT)
+	label.add_theme_font_override("font", UIKit.paper_font())
 	return label
 
 
 func _build_previous_panel() -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1400, 1050)
+	panel.custom_minimum_size = Vector2(1340, 1000)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 14)
 	panel.add_child(column)
@@ -115,7 +114,7 @@ func _build_previous_panel() -> Control:
 
 func _build_next_panel() -> Control:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1400, 1050)
+	panel.custom_minimum_size = Vector2(1340, 1000)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 14)
 	panel.add_child(column)
@@ -169,7 +168,8 @@ func _poll_interact() -> void:
 
 
 func _continue_prompt() -> String:
-	return "Press interact to start the next job" if GameFlow.current_contract != null else "Press interact to finish the day"
+	var what := "start the next job" if GameFlow.current_contract != null else "finish the day"
+	return "Press %s to %s" % [UIKit.INTERACT_KEYS, what]
 
 
 func _continue() -> void:

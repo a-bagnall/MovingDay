@@ -112,12 +112,12 @@ func _update_text() -> void:
 		lines.append(_notice)
 		lines.append("")
 	if NetworkManager.can_add_local_player():
-		lines.append("Hold E, Enter or gamepad A to join")
+		lines.append("Hold %s to join" % UIKit.INTERACT_KEYS)
 	if InputSetup.assigned_count() > 0:
 		if NetworkManager.mode == NetworkManager.Mode.CLIENT:
 			lines.append("The host chooses the run")
 		else:
-			lines.append("Stand on a slot and press interact to play")
+			lines.append("Stand on a slot and press %s to play" % UIKit.INTERACT_KEYS)
 	var online := _online_line()
 	if not online.is_empty():
 		lines.append(online)
@@ -140,7 +140,8 @@ func _update_text() -> void:
 func _online_line() -> String:
 	match NetworkManager.mode:
 		NetworkManager.Mode.HOST:
-			var addresses := NetworkManager.local_addresses()
+			# A PC can have many addresses (VPNs, virtual adapters); two is plenty for a hint.
+			var addresses := NetworkManager.local_addresses().slice(0, 2)
 			return "Online: hosting, %d/%d players. Friends on your network join with %s" % [
 				NetworkManager.player_count(), InputSetup.MAX_PLAYERS,
 				", ".join(addresses) if not addresses.is_empty() else "(no address found)"]

@@ -15,11 +15,20 @@ class_name UIKit
 const PACK := "res://assets/ui/DEMO_Cozy_UI_Pack_doboui/"
 const UI_SCALE := 0.4
 
+## Fonts. The main font is Peaberry (a pixel font, crispest at 16px multiples); the
+## typewriter face is for things that are physically paper (letters, receipts).
+const MAIN_FONT_PATH := "res://assets/fonts/Peaberry-Font-v2.0/Peaberry-Font-v2.0/Peaberry Font Family/Peaberry Base/PeaberryBase.ttf"
+const PAPER_FONT_PATH := "res://assets/fonts/XTypewriter_Font_0_96/TrueType (.ttf)/XTypewriter-Regular.ttf"
+
+## What players actually press. Prompts say this, never the word "interact".
+const INTERACT_KEYS := "E, Enter or gamepad A"
+
 const CREAM := Color("fffbe8")
 const BROWN := Color("9a5444")
 const BROWN_DARK := Color("5e2f25")
 const NOTE_TEXT := Color("7a4034")
 const GOLD := Color("ffe58a")
+const PINK := Color("ffb3a3")      # warnings, damage
 
 const FONT_SMALL := 40
 const FONT_BODY := 52
@@ -27,6 +36,8 @@ const FONT_BIG := 76
 const FONT_TITLE := 96
 
 static var _theme: Theme
+static var _main_font: Font
+static var _paper_font: Font
 
 
 ## Scales the layer down and adds a screen-filling, themed root to author into.
@@ -50,6 +61,24 @@ static func label(text: String, size: int = FONT_BODY,
 	return l
 
 
+static func main_font() -> Font:
+	if _main_font == null:
+		_main_font = load(MAIN_FONT_PATH)
+	return _main_font
+
+
+static func paper_font() -> Font:
+	if _paper_font == null:
+		_paper_font = load(PAPER_FONT_PATH)
+	return _paper_font
+
+
+## Gives a 3D label the same font and outline colour as the 2D UI.
+static func style_label3d(label: Label3D) -> void:
+	label.font = main_font()
+	label.outline_modulate = BROWN_DARK
+
+
 static func money(amount: float) -> String:
 	return "$%d" % roundi(amount)
 
@@ -62,6 +91,7 @@ static func theme() -> Theme:
 	if _theme:
 		return _theme
 	var t := Theme.new()
+	t.default_font = main_font()
 	t.default_font_size = FONT_BODY
 
 	# Text: cream with a dark brown outline reads on every panel colour.

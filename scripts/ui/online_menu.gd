@@ -126,7 +126,7 @@ func _build_session() -> void:
 				else ("the host" if peer_id == 1 else "a friend")
 			_content.add_child(UIKit.label("Player %d  -  %s" % [player_id, where], UIKit.FONT_BODY))
 		if NetworkManager.player_count() == 0:
-			_content.add_child(UIKit.label("Nobody has joined yet. Hold interact in the room to join.",
+			_content.add_child(UIKit.label("Nobody has joined yet. Hold %s in the room to join." % UIKit.INTERACT_KEYS,
 				UIKit.FONT_SMALL))
 
 	if NetworkManager.is_host():

@@ -47,6 +47,7 @@ func _init(p_size := Vector3(3.0, 0.1, 3.0), p_color := Color.WHITE, p_text := "
 	_label.font_size = 48
 	_label.pixel_size = 0.01
 	_label.outline_size = 16
+	UIKit.style_label3d(_label)
 	_label.position.y = 2.2
 	add_child(_label)
 

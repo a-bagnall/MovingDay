@@ -135,6 +135,7 @@ func _build_visual() -> void:
 	label.text = "%s\n%s - %s" % [data.display_name, _tier_text(), who]
 	label.modulate = _tier_color()
 	label.outline_size = 8
+	UIKit.style_label3d(label)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.pixel_size = 0.01
@@ -350,6 +351,7 @@ func _show_damage_popup(amount: float) -> void:
 	label.text = "-$%d" % maxi(roundi(amount), 1)
 	label.modulate = Color(1.0, 0.3, 0.3)
 	label.outline_size = 10
+	UIKit.style_label3d(label)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.pixel_size = 0.012
