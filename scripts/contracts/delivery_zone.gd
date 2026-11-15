@@ -1,13 +1,17 @@
 extends Area3D
 class_name DeliveryZone
-## The truck's cargo bay. Furniture counts as delivered while it is inside the
-## zone and not being held. Items knocked back out stop counting.
+## The truck's cargo bay. Furniture released inside for DELIVER_DELAY seconds
+## is delivered for good and dissolves; items leaving first reset their timer.
 
 signal delivery_changed(count: int)
+
+const DELIVER_DELAY := 1.0
 
 @export var size: Vector3 = Vector3(3.0, 2.2, 4.5)
 
 var delivered_items: Array[Furniture] = []
+
+var _dwell: Dictionary[Furniture, float] = {}
 
 
 func _ready() -> void:
@@ -24,20 +28,22 @@ func _ready() -> void:
 	add_child(col)
 
 
-func _physics_process(_delta: float) -> void:
-	var current: Array[Furniture] = []
+func _physics_process(delta: float) -> void:
+	var dwell: Dictionary[Furniture, float] = {}
 	for body in get_overlapping_bodies():
 		var f := body as Furniture
-		if f and not f.is_held():
-			current.append(f)
+		if f == null or f.is_delivered or f.is_held():
+			continue
+		var time: float = _dwell.get(f, 0.0) + delta
+		if time >= DELIVER_DELAY:
+			f.deliver()
+			delivered_items.append(f)
+			delivery_changed.emit(delivered_items.size())
+		else:
+			dwell[f] = time
 			f.in_truck = true
 
-	for old in delivered_items:
-		if is_instance_valid(old) and not current.has(old):
+	for old in _dwell:
+		if not dwell.has(old) and not old.is_delivered:
 			old.in_truck = false
-
-	if current.size() != delivered_items.size():
-		delivered_items = current
-		delivery_changed.emit(current.size())
-	else:
-		delivered_items = current
+	_dwell = dwell

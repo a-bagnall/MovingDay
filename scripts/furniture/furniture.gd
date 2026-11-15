@@ -16,10 +16,13 @@ const GRIP_REACH := 0.5       ## Distance from the furniture end to where a play
 const MAX_CARRY_ACCEL := 45.0
 const MAX_STRAIN := 3.5       ## Grip further than this from the holder = auto-drop.
 const HOLD_GRAVITY_SCALE := 0.25
+const DISSOLVE_TIME := 0.8
 
 var total_damage: float = 0.0
 var in_truck: bool = false
+var is_delivered: bool = false
 
+var _visual: Node3D
 var _grips := PackedVector3Array()
 var _size: Vector3
 var _holders: Dictionary = {}   # grip index (int) -> Player
@@ -64,10 +67,12 @@ func _build_collision() -> void:
 
 
 func _build_visual() -> void:
+	_visual = Node3D.new()
+	add_child(_visual)
 	if model_scene:
 		var model := model_scene.instantiate() as Node3D
 		model.scale = Vector3.ONE * model_scale
-		add_child(model)
+		_visual.add_child(model)
 		var bounds := _model_bounds(model)
 		model.position = -bounds.get_center()
 		_size = bounds.size
@@ -80,7 +85,7 @@ func _build_visual() -> void:
 		_base_color = _color_for_handling()
 		_material.albedo_color = _base_color
 		mesh.material_override = _material
-		add_child(mesh)
+		_visual.add_child(mesh)
 
 	var label := Label3D.new()
 	label.text = data.display_name
@@ -89,7 +94,7 @@ func _build_visual() -> void:
 	label.pixel_size = 0.01
 	label.font_size = 28
 	label.position.y = _size.y * 0.5 + 0.4
-	add_child(label)
+	_visual.add_child(label)
 
 
 func _model_bounds(model: Node3D) -> AABB:
@@ -242,6 +247,31 @@ func _update_player_speed(lift: float, strain: float) -> void:
 	mult *= clampf(1.0 - maxf(strain - 0.8, 0.0) / 2.5, 0.25, 1.0)
 	for player in _holders.values():
 		(player as Player).speed_multiplier = mult
+
+
+# --- delivery -------------------------------------------------------------
+
+## Permanent: the item stops being physical and dissolves, but the node stays so
+## its damage still counts toward the contract.
+func deliver() -> void:
+	is_delivered = true
+	in_truck = true
+	remove_from_group("furniture")
+	freeze = true
+	collision_layer = 0
+	collision_mask = 0
+
+	var tween := create_tween().set_parallel()
+	tween.tween_property(_visual, "scale", Vector3.ONE * 0.4, DISSOLVE_TIME)
+	tween.tween_property(_visual, "position:y", 0.5, DISSOLVE_TIME)
+	for node: GeometryInstance3D in _visual.find_children("*", "GeometryInstance3D", true, false):
+		tween.tween_property(node, "transparency", 1.0, DISSOLVE_TIME)
+	tween.finished.connect(_on_dissolved)
+
+
+func _on_dissolved() -> void:
+	visible = false
+	process_mode = Node.PROCESS_MODE_DISABLED
 
 
 # --- damage ---------------------------------------------------------------
