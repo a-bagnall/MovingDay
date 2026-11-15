@@ -8,7 +8,7 @@ Open the project in Godot 4.7 and press F5.
 
 ## Controls
 
-Hold the interact button on the join screen to claim a player slot. First to join is P1.
+The game starts in the main menu. Hold the interact button there to claim a player slot (first to join is P1), then stand on a run slot pad and press interact to start a new run or continue a saved one. A run is a series of days, each a job. Every 3 days the players visit the hub (walk onto the truck pad together to start the next job). The game saves only at the start and end of a day.
 
 | Source | Move | Interact (grab / drop) |
 | --- | --- | --- |
@@ -16,4 +16,4 @@ Hold the interact button on the join screen to claim a player slot. First to joi
 | Keyboard | Arrow keys | Enter |
 | Gamepad | Left stick | A |
 
-Heavy items need two players (one player can lift them, but loses grip easily). Press R after finishing a job to restart. Press F3 for a debug overlay showing grip, damage and impact values.
+Heavy items need two players (one player can lift them, but loses grip easily). Press interact on the results screen to continue. Press F3 for a debug overlay showing grip, damage and impact values.

@@ -8,6 +8,8 @@ signal contract_finished(result: Dictionary)
 const BASE_PAY := 500.0
 const PAR_TIME := 120.0        ## Seconds under which a time bonus is earned.
 const TIME_BONUS_RATE := 2.0   ## Dollars per second under par.
+## Seconds before the results can be dismissed, so a button held at the finish does not skip them.
+const CONTINUE_DELAY := 1.5
 
 var zone: DeliveryZone
 var required: Array[Furniture] = []
@@ -19,6 +21,9 @@ var _delivered_value: Label
 var _damage_value: Label
 var _time_value: Label
 var _results: Control
+var _result := {}
+var _results_age := 0.0
+var _interact_prev: Dictionary[int, bool] = {}   # keyed by player id
 
 
 func setup(delivery_zone: DeliveryZone, items: Array[Furniture]) -> void:
@@ -81,7 +86,10 @@ func _add_chip(bar: HBoxContainer, caption: String) -> Label:
 
 
 func _process(delta: float) -> void:
-	if finished or zone == null:
+	if finished:
+		_poll_continue(delta)
+		return
+	if zone == null:
 		return
 	elapsed += delta
 
@@ -125,6 +133,7 @@ func _finish() -> void:
 		"time_bonus": time_bonus,
 		"payment": payment,
 	}
+	_result = result
 	_show_results(result, delivered)
 	contract_finished.emit(result)
 
@@ -175,7 +184,7 @@ func _show_results(result: Dictionary, delivered: int) -> void:
 	var prompt := PanelContainer.new()
 	prompt.theme_type_variation = &"ButtonPanel"
 	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	prompt.add_child(UIKit.label("Press R to play again", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
+	prompt.add_child(UIKit.label("Press interact to continue", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
 	column.add_child(prompt)
 
 	_animate_in(column, dim)
@@ -205,7 +214,14 @@ func _animate_in(column: Control, dim: Control) -> void:
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	var key := event as InputEventKey
-	if finished and key and key.pressed and key.keycode == KEY_R:
-		get_tree().reload_current_scene()
+## Any player pressing interact (a fresh press, after CONTINUE_DELAY) ends the day.
+func _poll_continue(delta: float) -> void:
+	_results_age += delta
+	for player_id in range(1, InputSetup.assigned_count() + 1):
+		var pressed := InputSetup.is_interact_pressed(InputSetup.source_of(player_id))
+		var was_pressed: bool = _interact_prev.get(player_id, true)
+		_interact_prev[player_id] = pressed
+		if pressed and not was_pressed and _results_age >= CONTINUE_DELAY:
+			set_process(false)   # one call only; the scene changes next frame
+			GameFlow.finish_day(_result)
+			return

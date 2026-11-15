@@ -10,7 +10,7 @@ const DELIVER_DELAY := 1.0
 @export var size: Vector3 = Vector3(3.0, 2.2, 4.5)
 
 var delivered_items: Array[Furniture] = []
-## False in the lobby: nothing counts as delivered.
+## False in the hub: nothing counts as delivered.
 var active := true
 
 var _dwell: Dictionary[Furniture, float] = {}

@@ -333,8 +333,14 @@ Run Modifiers
 - Every n days the players choose one modifier from a "choose one" selection, similar to PlateUp!.
 - Each modifier adds extra complexity for the rest of that run.
 - Modifiers are intended to be an eventual run killer.
-End of Day Shop
-At the end of every day, players can spend the money they earned on:
+Main Menu and Hub
+The main menu and the hub are two separate walkable areas that work alike: players walk around a small room and stand on pads to act.
+- Main menu: players join in-world, choose a run slot (new run or continue) and, later, visit the wardrobe.
+- Hub: in-run only. The players reach it every N days (GameFlow.HUB_EVERY_N_DAYS, currently 3), not every day, as a respite between days. They spend money there and walk onto the truck pad together to start the next job.
+- Saving happens only at the start and end of a day.
+
+Hub Shop
+In the hub, players can spend the money they earned on:
 - Coffees and energy drinks: temporary stat increases that apply on use.
 - Outfit items: these earn more money through a style bonus.
 - Rare outfit items may be enchanted and add extra effects.

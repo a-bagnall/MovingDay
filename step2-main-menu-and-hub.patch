@@ -1,0 +1,862 @@
+diff --git a/README.md b/README.md
+index ddb97a3..8f60e02 100644
+--- a/README.md
++++ b/README.md
+@@ -8,7 +8,7 @@ Open the project in Godot 4.7 and press F5.
+ 
+ ## Controls
+ 
+-Hold the interact button on the join screen to claim a player slot. First to join is P1.
++The game starts in the main menu. Hold the interact button there to claim a player slot (first to join is P1), then stand on a run slot pad and press interact to start a new run or continue a saved one. A run is a series of days, each a job. Every 3 days the players visit the hub (walk onto the truck pad together to start the next job). The game saves only at the start and end of a day.
+ 
+ | Source | Move | Interact (grab / drop) |
+ | --- | --- | --- |
+@@ -16,4 +16,4 @@ Hold the interact button on the join screen to claim a player slot. First to joi
+ | Keyboard | Arrow keys | Enter |
+ | Gamepad | Left stick | A |
+ 
+-Heavy items need two players (one player can lift them, but loses grip easily). Press R after finishing a job to restart. Press F3 for a debug overlay showing grip, damage and impact values.
++Heavy items need two players (one player can lift them, but loses grip easily). Press interact on the results screen to continue. Press F3 for a debug overlay showing grip, damage and impact values.
+diff --git a/gdd.txt b/gdd.txt
+index 7d99b1b..25e4306 100644
+--- a/gdd.txt
++++ b/gdd.txt
+@@ -333,8 +333,14 @@ Run Modifiers
+ - Every n days the players choose one modifier from a "choose one" selection, similar to PlateUp!.
+ - Each modifier adds extra complexity for the rest of that run.
+ - Modifiers are intended to be an eventual run killer.
+-End of Day Shop
+-At the end of every day, players can spend the money they earned on:
++Main Menu and Hub
++The main menu and the hub are two separate walkable areas that work alike: players walk around a small room and stand on pads to act.
++- Main menu: players join in-world, choose a run slot (new run or continue) and, later, visit the wardrobe.
++- Hub: in-run only. The players reach it every N days (GameFlow.HUB_EVERY_N_DAYS, currently 3), not every day, as a respite between days. They spend money there and walk onto the truck pad together to start the next job.
++- Saving happens only at the start and end of a day.
++
++Hub Shop
++In the hub, players can spend the money they earned on:
+ - Coffees and energy drinks: temporary stat increases that apply on use.
+ - Outfit items: these earn more money through a style bonus.
+ - Rare outfit items may be enchanted and add extra effects.
+diff --git a/project.godot b/project.godot
+index ddbc1a0..14a47b8 100644
+--- a/project.godot
++++ b/project.godot
+@@ -11,7 +11,7 @@ config_version=5
+ [application]
+ 
+ config/name="MovingDay!"
+-run/main_scene="res://scenes/levels/test_house.tscn"
++run/main_scene="res://scenes/main/main_menu.tscn"
+ config/features=PackedStringArray("4.7", "Forward Plus")
+ config/icon="res://icon.svg"
+ 
+@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
+ 
+ InputSetup="*uid://c4ay3ep4hxwj3"
+ SaveManager="*res://scripts/progression/save_manager.gd"
++GameFlow="*res://scripts/progression/game_flow.gd"
+ 
+ [display]
+ 
+diff --git a/scripts/characters/player.gd b/scripts/characters/player.gd
+index e3a978e..379920b 100644
+--- a/scripts/characters/player.gd
++++ b/scripts/characters/player.gd
+@@ -30,7 +30,7 @@ const CAMERA_YAW := PI / 4.0
+ ## Set each frame by the furniture being carried (1.0 = unencumbered).
+ var speed_multiplier: float = 1.0
+ var held_furniture: Furniture = null
+-## False while in the lobby: players can move but not grab.
++## False in the main menu and hub: players can move but not grab.
+ var can_interact := true
+ 
+ var _visual: Node3D
+diff --git a/scripts/contracts/contract_tracker.gd b/scripts/contracts/contract_tracker.gd
+index cd53740..69a7f93 100644
+--- a/scripts/contracts/contract_tracker.gd
++++ b/scripts/contracts/contract_tracker.gd
+@@ -8,6 +8,8 @@ signal contract_finished(result: Dictionary)
+ const BASE_PAY := 500.0
+ const PAR_TIME := 120.0        ## Seconds under which a time bonus is earned.
+ const TIME_BONUS_RATE := 2.0   ## Dollars per second under par.
++## Seconds before the results can be dismissed, so a button held at the finish does not skip them.
++const CONTINUE_DELAY := 1.5
+ 
+ var zone: DeliveryZone
+ var required: Array[Furniture] = []
+@@ -19,6 +21,9 @@ var _delivered_value: Label
+ var _damage_value: Label
+ var _time_value: Label
+ var _results: Control
++var _result := {}
++var _results_age := 0.0
++var _interact_prev: Dictionary[int, bool] = {}   # keyed by player id
+ 
+ 
+ func setup(delivery_zone: DeliveryZone, items: Array[Furniture]) -> void:
+@@ -81,7 +86,10 @@ func _add_chip(bar: HBoxContainer, caption: String) -> Label:
+ 
+ 
+ func _process(delta: float) -> void:
+-	if finished or zone == null:
++	if finished:
++		_poll_continue(delta)
++		return
++	if zone == null:
+ 		return
+ 	elapsed += delta
+ 
+@@ -125,6 +133,7 @@ func _finish() -> void:
+ 		"time_bonus": time_bonus,
+ 		"payment": payment,
+ 	}
++	_result = result
+ 	_show_results(result, delivered)
+ 	contract_finished.emit(result)
+ 
+@@ -175,7 +184,7 @@ func _show_results(result: Dictionary, delivered: int) -> void:
+ 	var prompt := PanelContainer.new()
+ 	prompt.theme_type_variation = &"ButtonPanel"
+ 	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+-	prompt.add_child(UIKit.label("Press R to play again", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
++	prompt.add_child(UIKit.label("Press interact to continue", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
+ 	column.add_child(prompt)
+ 
+ 	_animate_in(column, dim)
+@@ -205,7 +214,14 @@ func _animate_in(column: Control, dim: Control) -> void:
+ 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+ 
+ 
+-func _unhandled_input(event: InputEvent) -> void:
+-	var key := event as InputEventKey
+-	if finished and key and key.pressed and key.keycode == KEY_R:
+-		get_tree().reload_current_scene()
++## Any player pressing interact (a fresh press, after CONTINUE_DELAY) ends the day.
++func _poll_continue(delta: float) -> void:
++	_results_age += delta
++	for player_id in range(1, InputSetup.assigned_count() + 1):
++		var pressed := InputSetup.is_interact_pressed(InputSetup.source_of(player_id))
++		var was_pressed: bool = _interact_prev.get(player_id, true)
++		_interact_prev[player_id] = pressed
++		if pressed and not was_pressed and _results_age >= CONTINUE_DELAY:
++			set_process(false)   # one call only; the scene changes next frame
++			GameFlow.finish_day(_result)
++			return
+diff --git a/scripts/contracts/delivery_zone.gd b/scripts/contracts/delivery_zone.gd
+index d892401..c33156e 100644
+--- a/scripts/contracts/delivery_zone.gd
++++ b/scripts/contracts/delivery_zone.gd
+@@ -10,7 +10,7 @@ const DELIVER_DELAY := 1.0
+ @export var size: Vector3 = Vector3(3.0, 2.2, 4.5)
+ 
+ var delivered_items: Array[Furniture] = []
+-## False in the lobby: nothing counts as delivered.
++## False in the hub: nothing counts as delivered.
+ var active := true
+ 
+ var _dwell: Dictionary[Furniture, float] = {}
+diff --git a/scripts/furniture/furniture.gd b/scripts/furniture/furniture.gd
+index dd979e8..3f5ccbc 100644
+--- a/scripts/furniture/furniture.gd
++++ b/scripts/furniture/furniture.gd
+@@ -51,7 +51,7 @@ static var _dust_curve: Curve
+ var total_damage: float = 0.0
+ var in_truck: bool = false
+ var is_delivered: bool = false
+-## False in the lobby so settling and nudges cost nothing.
++## False until the job's settle period ends, so spawn settling and nudges cost nothing.
+ var damage_enabled: bool = true
+ 
+ ## Last notable impact (m/s of velocity change) and seconds since, for the debug overlay.
+diff --git a/scripts/levels/test_house.gd b/scripts/levels/test_house.gd
+index 0ece266..e74cd01 100644
+--- a/scripts/levels/test_house.gd
++++ b/scripts/levels/test_house.gd
+@@ -27,6 +27,9 @@ const FURNITURE_MODEL_SCALE := 0.6
+ ## World x of the truck ramp's foot, just outside the east exit.
+ const TRUCK_FOOT_X := 7.0
+ 
++## Seconds after the job loads before furniture can take damage (spawn settling is free).
++const SETTLE_TIME := 1.5
++
+ ## Spawn point per player id (index = id - 1).
+ const PLAYER_SPAWNS := [Vector3(-3.0, 0.1, 2.5), Vector3(-2.0, 0.1, 2.5)]
+ 
+@@ -55,31 +58,29 @@ var _keep_clear: Array[AABB] = []
+ 
+ 
+ func _ready() -> void:
++	assert(SaveManager.run != null, "Job started with no active run; start from the main menu")
+ 	_build_environment()
+ 	_build_house()
+ 	var zone := _build_truck()
+-	zone.active = false
+ 	add_child(IsoCamera.new())
+ 	add_child(DebugOverlay.new())
+ 	var items := _spawn_furniture()
+ 
+ 	for player_id in range(1, InputSetup.assigned_count() + 1):
+ 		_spawn_player(player_id)
+-	var lobby := Lobby.new()
+-	lobby.player_joined.connect(_spawn_player)
+-	lobby.started.connect(_start_job.bind(zone, items))
+-	add_child(lobby)
++	SaveManager.begin_day()
++	_start_job(zone, items)
+ 
+ 
+ func _start_job(zone: DeliveryZone, items: Array[Furniture]) -> void:
+-	for player: Player in get_tree().get_nodes_in_group("players"):
+-		player.can_interact = true
+-	for item in items:
+-		item.damage_enabled = true
+ 	zone.active = true
+ 	var tracker := ContractTracker.new()
+ 	add_child(tracker)
+ 	tracker.setup(zone, items)
++	# Items drop onto the floor when spawned; let them settle before impacts cost money.
++	await get_tree().create_timer(SETTLE_TIME).timeout
++	for item in items:
++		item.damage_enabled = true
+ 
+ 
+ # --- world ----------------------------------------------------------------
+@@ -270,7 +271,6 @@ func _build_truck() -> DeliveryZone:
+ func _spawn_player(player_id: int) -> void:
+ 	var p := Player.new()
+ 	p.player_id = player_id
+-	p.can_interact = false
+ 	if PLAYER_MODELS.has(player_id):
+ 		p.model_scene = load(PLAYER_MODELS[player_id])
+ 	p.position = PLAYER_SPAWNS[player_id - 1]
+diff --git a/scripts/progression/save_manager.gd b/scripts/progression/save_manager.gd
+index 4789379..7017e65 100644
+--- a/scripts/progression/save_manager.gd
++++ b/scripts/progression/save_manager.gd
+@@ -29,14 +29,22 @@ func has_run(slot: int) -> bool:
+ 	return FileAccess.file_exists(_slot_path(slot))
+ 
+ 
+-## Loads an existing slot as the active run.
+-func continue_run(slot: int) -> void:
+-	assert(has_run(slot), "continue_run: slot %d is empty" % slot)
++## Reads a slot without making it the active run (for menus). Null if empty.
++func peek_run(slot: int) -> RunState:
++	if not has_run(slot):
++		return null
+ 	var state := RunState.from_dict(_read_json(_slot_path(slot)))
+ 	if state == null:
+ 		_fail("Run slot %d is invalid (see error above)" % slot)
+-		return
++		return null
+ 	assert(state.slot == slot, "Run slot %d file says it belongs to slot %d" % [slot, state.slot])
++	return state
++
++
++## Loads an existing slot as the active run.
++func continue_run(slot: int) -> void:
++	var state := peek_run(slot)
++	assert(state != null, "continue_run: slot %d is empty" % slot)
+ 	run = state
+ 
+ 
+diff --git a/scripts/ui/lobby.gd b/scripts/ui/lobby.gd
+deleted file mode 100644
+index f36ff63..0000000
+--- a/scripts/ui/lobby.gd
++++ /dev/null
+@@ -1,115 +0,0 @@
+-extends CanvasLayer
+-class_name Lobby
+-## Pre-job lobby. Input sources (keyboard scheme or gamepad) join by holding
+-## interact and the level spawns that player; each joined player then presses
+-## interact to toggle ready. Once everyone is ready a countdown runs, and at
+-## zero `started` fires. Un-readying cancels the countdown.
+-
+-signal player_joined(player_id: int)
+-signal started
+-
+-const HOLD_TIME := 0.8
+-const COUNTDOWN_TIME := 5.0
+-
+-var _held: Dictionary[int, float] = {}
+-var _was_pressed: Dictionary[int, bool] = {}
+-var _ready_flags: Array[bool] = []
+-var _countdown := -1.0
+-var _label: Label
+-
+-
+-func _ready() -> void:
+-	_ready_flags.resize(InputSetup.MAX_PLAYERS)
+-	for player_id in range(1, InputSetup.assigned_count() + 1):
+-		var source := InputSetup.source_of(player_id)
+-		_was_pressed[source] = InputSetup.is_interact_pressed(source)
+-
+-	var root := UIKit.setup(self)
+-	var center := CenterContainer.new()
+-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+-	root.add_child(center)
+-
+-	var column := VBoxContainer.new()
+-	column.add_theme_constant_override("separation", 28)
+-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+-	center.add_child(column)
+-
+-	var banner := PanelContainer.new()
+-	banner.theme_type_variation = &"BannerPanel"
+-	banner.custom_minimum_size = Vector2(1300, 0)
+-	banner.add_child(UIKit.label("MOVING DAY!", UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
+-	column.add_child(banner)
+-
+-	var panel := PanelContainer.new()
+-	panel.custom_minimum_size = Vector2(1300, 0)
+-	_label = UIKit.label("", UIKit.FONT_BODY)
+-	panel.add_child(_label)
+-	column.add_child(panel)
+-
+-
+-func _process(delta: float) -> void:
+-	_poll_joins(delta)
+-	_poll_ready()
+-	_update_countdown(delta)
+-	_update_text()
+-
+-
+-func _poll_joins(delta: float) -> void:
+-	for source in InputSetup.available_sources():
+-		if InputSetup.assigned_count() >= InputSetup.MAX_PLAYERS:
+-			return
+-		if InputSetup.is_assigned(source):
+-			continue
+-		if InputSetup.is_interact_pressed(source):
+-			var held: float = _held.get(source, 0.0) + delta
+-			_held[source] = held
+-			if held >= HOLD_TIME:
+-				_held.erase(source)
+-				InputSetup.assign(source)
+-				# The join hold must not count as the first ready press.
+-				_was_pressed[source] = true
+-				player_joined.emit(InputSetup.assigned_count())
+-		else:
+-			_held.erase(source)
+-
+-
+-func _poll_ready() -> void:
+-	for player_id in range(1, InputSetup.assigned_count() + 1):
+-		var source := InputSetup.source_of(player_id)
+-		var pressed := InputSetup.is_interact_pressed(source)
+-		if pressed and not _was_pressed.get(source, false):
+-			_ready_flags[player_id - 1] = not _ready_flags[player_id - 1]
+-		_was_pressed[source] = pressed
+-
+-
+-func _update_countdown(delta: float) -> void:
+-	if _ready_flags.has(false):
+-		_countdown = -1.0
+-		return
+-	if _countdown < 0.0:
+-		_countdown = COUNTDOWN_TIME
+-	_countdown -= delta
+-	if _countdown <= 0.0:
+-		started.emit()
+-		queue_free()
+-
+-
+-func _update_text() -> void:
+-	var lines := PackedStringArray()
+-	if InputSetup.assigned_count() < InputSetup.MAX_PLAYERS:
+-		lines.append("Hold E, Enter or gamepad A to join")
+-	lines.append("Press your interact button to ready up")
+-	lines.append("")
+-	for player_id in range(1, InputSetup.MAX_PLAYERS + 1):
+-		if player_id <= InputSetup.assigned_count():
+-			var state := "READY" if _ready_flags[player_id - 1] else "not ready"
+-			lines.append("Player %d: %s - %s" % [player_id, InputSetup.describe(InputSetup.source_of(player_id)), state])
+-		else:
+-			lines.append("Player %d: waiting..." % player_id)
+-	for source in _held:
+-		lines.append("Joining: %s %d%%" % [InputSetup.describe(source), roundi(_held[source] / HOLD_TIME * 100.0)])
+-	if _countdown >= 0.0:
+-		lines.append("")
+-		lines.append("Starting in %d" % ceili(_countdown))
+-	_label.text = "\n".join(lines)
+diff --git a/scripts/ui/lobby.gd.uid b/scripts/ui/lobby.gd.uid
+deleted file mode 100644
+index 95331e4..0000000
+--- a/scripts/ui/lobby.gd.uid
++++ /dev/null
+@@ -1 +0,0 @@
+-uid://bh2lbkaedl3g1
+diff --git a/scenes/levels/hub.tscn b/scenes/levels/hub.tscn
+new file mode 100644
+index 0000000..259a0d5
+--- /dev/null
++++ b/scenes/levels/hub.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://scripts/world/hub.gd" id="1"]
++
++[node name="Hub" type="Node3D"]
++script = ExtResource("1")
+diff --git a/scenes/main/main_menu.tscn b/scenes/main/main_menu.tscn
+new file mode 100644
+index 0000000..ffa3340
+--- /dev/null
++++ b/scenes/main/main_menu.tscn
+@@ -0,0 +1,6 @@
++[gd_scene load_steps=2 format=3]
++
++[ext_resource type="Script" path="res://scripts/world/main_menu.gd" id="1"]
++
++[node name="MainMenu" type="Node3D"]
++script = ExtResource("1")
+diff --git a/scripts/progression/game_flow.gd b/scripts/progression/game_flow.gd
+new file mode 100644
+index 0000000..005ede2
+--- /dev/null
++++ b/scripts/progression/game_flow.gd
+@@ -0,0 +1,55 @@
++extends Node
++## Autoload "GameFlow". Moves between the main menu, the hub and the job scene.
++## Saving stays in SaveManager (day boundaries only); this only picks the next scene.
++##
++## Day order: days 1..N are jobs, then a hub visit, then N more jobs, and so on,
++## where N is HUB_EVERY_N_DAYS. The hub is in-run only.
++
++const HUB_EVERY_N_DAYS := 3
++
++const MAIN_MENU_SCENE := "res://scenes/main/main_menu.tscn"
++const HUB_SCENE := "res://scenes/levels/hub.tscn"
++const JOB_SCENE := "res://scenes/levels/test_house.tscn"
++
++
++## True if the hub comes before `day` (never before day 1).
++func is_hub_day(day: int) -> bool:
++	return day > 1 and (day - 1) % HUB_EVERY_N_DAYS == 0
++
++
++## Starts a fresh run in an empty slot. Day 1 is always a job.
++func new_run(slot: int) -> void:
++	SaveManager.new_run(slot)
++	_go(JOB_SCENE)
++
++
++## Resumes a saved run from the start of its current day.
++func continue_run(slot: int) -> void:
++	SaveManager.continue_run(slot)
++	_enter_day()
++
++
++## Leaves the hub for the job of the current day.
++func start_job() -> void:
++	_go(JOB_SCENE)
++
++
++## Called when the results screen is dismissed: saves the finished day and moves on.
++func finish_day(result: Dictionary) -> void:
++	SaveManager.end_day(result)
++	_enter_day()
++
++
++## Ends the run (deletes its slot, keeps the profile) and returns to the main menu.
++func end_run() -> void:
++	SaveManager.end_run()
++	_go(MAIN_MENU_SCENE)
++
++
++func _enter_day() -> void:
++	_go(HUB_SCENE if is_hub_day(SaveManager.run.day) else JOB_SCENE)
++
++
++func _go(path: String) -> void:
++	var err := get_tree().change_scene_to_file(path)
++	assert(err == OK, "Could not load %s: %s" % [path, error_string(err)])
+diff --git a/scripts/world/interact_zone.gd b/scripts/world/interact_zone.gd
+new file mode 100644
+index 0000000..3fdad94
+--- /dev/null
++++ b/scripts/world/interact_zone.gd
+@@ -0,0 +1,60 @@
++extends Area3D
++class_name InteractZone
++## A floor pad with a floating label, used in the main menu and the hub. It only
++## reports which players stand on it and when one of them presses interact;
++## WalkableArea does the input polling and the owning area decides what it means.
++
++signal interacted(player_id: int)
++
++const ZONE_HEIGHT := 2.0
++const PAD_ALPHA := 0.55
++
++var _label: Label3D
++
++
++func _init(p_size := Vector3(3.0, 0.1, 3.0), p_color := Color.WHITE, p_text := "") -> void:
++	collision_layer = 0
++	collision_mask = 1 << 1   # players
++	monitoring = true
++	monitorable = false
++
++	var shape := BoxShape3D.new()
++	shape.size = Vector3(p_size.x, ZONE_HEIGHT, p_size.z)
++	var col := CollisionShape3D.new()
++	col.shape = shape
++	col.position.y = ZONE_HEIGHT * 0.5
++	add_child(col)
++
++	var pad := BoxMesh.new()
++	pad.size = Vector3(p_size.x, 0.05, p_size.z)
++	var material := StandardMaterial3D.new()
++	material.albedo_color = Color(p_color, PAD_ALPHA)
++	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
++	var mesh := MeshInstance3D.new()
++	mesh.mesh = pad
++	mesh.material_override = material
++	mesh.position.y = 0.03
++	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
++	add_child(mesh)
++
++	_label = Label3D.new()
++	_label.text = p_text
++	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
++	_label.font_size = 48
++	_label.pixel_size = 0.01
++	_label.outline_size = 16
++	_label.position.y = 2.2
++	add_child(_label)
++
++
++func set_text(text: String) -> void:
++	_label.text = text
++
++
++func players_inside() -> Array[Player]:
++	var out: Array[Player] = []
++	for body in get_overlapping_bodies():
++		var player := body as Player
++		if player:
++			out.append(player)
++	return out
+diff --git a/scripts/world/walkable_area.gd b/scripts/world/walkable_area.gd
+new file mode 100644
+index 0000000..31f46cf
+--- /dev/null
++++ b/scripts/world/walkable_area.gd
+@@ -0,0 +1,152 @@
++extends Node3D
++class_name WalkableArea
++## Base for the main menu and the hub: a small walkable room with the iso camera,
++## spawned players, interact zones and a themed HUD. Subclasses set `room_size`
++## in _init(), override _spawn_point(), and add zones in _ready() after super().
++##
++## Players here cannot grab anything (can_interact is false). Pressing interact
++## on a zone emits that zone's `interacted` signal.
++
++const WALL_HEIGHT := 1.2   # same low walls as the test house, to keep the iso view readable
++const WALL_THICKNESS := 0.3
++const FLOOR_COLOR := Color(0.78, 0.65, 0.5)
++const WALL_COLOR := Color(0.9, 0.88, 0.8)
++
++## x and z extent of the room, centred on the origin. Set it in the subclass _init().
++var room_size := Vector2(20.0, 12.0)
++
++var _zones: Array[InteractZone] = []
++var _interact_prev: Dictionary[int, bool] = {}
++
++
++func _ready() -> void:
++	_build_environment()
++	_build_room()
++	add_child(IsoCamera.new())
++	for player_id in range(1, InputSetup.assigned_count() + 1):
++		spawn_player(player_id)
++
++
++func _physics_process(_delta: float) -> void:
++	for player: Player in get_tree().get_nodes_in_group("players"):
++		var pressed := InputSetup.is_interact_pressed(InputSetup.source_of(player.player_id))
++		if pressed and not _interact_prev.get(player.player_id, true):
++			for zone in _zones:
++				if zone.players_inside().has(player):
++					zone.interacted.emit(player.player_id)
++		_interact_prev[player.player_id] = pressed
++
++
++## Where `player_id` appears. Override in the subclass.
++func _spawn_point(_player_id: int) -> Vector3:
++	return Vector3(0.0, 0.1, 0.0)
++
++
++func spawn_player(player_id: int) -> void:
++	var player := Player.new()
++	player.player_id = player_id
++	player.can_interact = false
++	player.position = _spawn_point(player_id)
++	add_child(player)
++	# A button still held from the join (or the previous screen) must be released
++	# before it counts as a zone press.
++	_interact_prev[player_id] = InputSetup.is_interact_pressed(InputSetup.source_of(player_id))
++
++
++func add_zone(center: Vector3, size: Vector3, color: Color, text: String) -> InteractZone:
++	var zone := InteractZone.new(size, color, text)
++	zone.position = center
++	add_child(zone)
++	_zones.append(zone)
++	return zone
++
++
++## Builds the screen layout (title banner on top, status note at the bottom) and
++## returns the status label for the subclass to update.
++func _build_hud(title: String) -> Label:
++	var layer := CanvasLayer.new()
++	add_child(layer)
++	var root := UIKit.setup(layer)
++
++	var margin := MarginContainer.new()
++	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
++	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
++	for side in ["left", "top", "right", "bottom"]:
++		margin.add_theme_constant_override("margin_" + side, 40)
++	root.add_child(margin)
++
++	var column := VBoxContainer.new()
++	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
++	margin.add_child(column)
++
++	var banner := PanelContainer.new()
++	banner.theme_type_variation = &"BannerPanel"
++	banner.custom_minimum_size = Vector2(1300, 0)
++	banner.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
++	banner.add_child(UIKit.label(title, UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
++	column.add_child(banner)
++
++	var spacer := Control.new()
++	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
++	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
++	column.add_child(spacer)
++
++	var note := PanelContainer.new()
++	note.theme_type_variation = &"NotePanel"
++	note.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
++	var status := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel")
++	note.add_child(status)
++	column.add_child(note)
++	return status
++
++
++# --- world ----------------------------------------------------------------
++
++func _build_environment() -> void:
++	var env := Environment.new()
++	env.background_mode = Environment.BG_COLOR
++	env.background_color = Color(0.55, 0.75, 0.9)
++	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
++	env.ambient_light_color = Color(0.85, 0.85, 0.95)
++	env.ambient_light_energy = 0.7
++	var world_env := WorldEnvironment.new()
++	world_env.environment = env
++	add_child(world_env)
++
++	var sun := DirectionalLight3D.new()
++	sun.rotation_degrees = Vector3(-55, 30, 0)
++	sun.shadow_enabled = true
++	add_child(sun)
++
++
++func _build_room() -> void:
++	# Floor top sits at y = 0, matching the house floor.
++	_add_box(Vector3(0.0, -0.15, 0.0), Vector3(room_size.x, 0.3, room_size.y), FLOOR_COLOR)
++	var half := room_size * 0.5
++	var wall_y := WALL_HEIGHT * 0.5
++	_add_box(Vector3(0.0, wall_y, -half.y), Vector3(room_size.x, WALL_HEIGHT, WALL_THICKNESS), WALL_COLOR)
++	_add_box(Vector3(0.0, wall_y, half.y), Vector3(room_size.x, WALL_HEIGHT, WALL_THICKNESS), WALL_COLOR)
++	_add_box(Vector3(-half.x, wall_y, 0.0), Vector3(WALL_THICKNESS, WALL_HEIGHT, room_size.y), WALL_COLOR)
++	_add_box(Vector3(half.x, wall_y, 0.0), Vector3(WALL_THICKNESS, WALL_HEIGHT, room_size.y), WALL_COLOR)
++
++
++func _add_box(center: Vector3, size: Vector3, color: Color) -> void:
++	var body := StaticBody3D.new()
++	body.collision_layer = 1
++	body.position = center
++
++	var shape := BoxShape3D.new()
++	shape.size = size
++	var col := CollisionShape3D.new()
++	col.shape = shape
++	body.add_child(col)
++
++	var material := StandardMaterial3D.new()
++	material.albedo_color = color
++	var box := BoxMesh.new()
++	box.size = size
++	var mesh := MeshInstance3D.new()
++	mesh.mesh = box
++	mesh.material_override = material
++	body.add_child(mesh)
++	add_child(body)
+diff --git a/scripts/world/main_menu.gd b/scripts/world/main_menu.gd
+new file mode 100644
+index 0000000..f970a4d
+--- /dev/null
++++ b/scripts/world/main_menu.gd
+@@ -0,0 +1,89 @@
++extends WalkableArea
++class_name MainMenu
++## Main scene. Input sources (keyboard scheme or gamepad) join by holding interact;
++## each joined player appears in the room. Standing on a run-slot pad and pressing
++## interact starts a new run (empty slot) or continues the saved one.
++
++const HOLD_TIME := 0.8
++const SLOT_SPACING := 5.0
++const SLOT_Z := -2.0
++const PAD_SIZE := Vector3(3.0, 0.1, 3.0)
++const SLOT_COLOR := Color(0.95, 0.75, 0.3)
++const PLACEHOLDER_COLOR := Color(0.6, 0.6, 0.65)
++
++var _held: Dictionary[int, float] = {}
++var _status: Label
++
++
++func _init() -> void:
++	room_size = Vector2(20.0, 10.0)
++
++
++func _ready() -> void:
++	super()
++	_status = _build_hud("MOVING DAY!")
++
++	for slot in range(1, SaveManager.SLOT_COUNT + 1):
++		var x := (slot - (SaveManager.SLOT_COUNT + 1) * 0.5) * SLOT_SPACING
++		var zone := add_zone(Vector3(x, 0.0, SLOT_Z), PAD_SIZE, SLOT_COLOR, _slot_text(slot))
++		zone.interacted.connect(_on_slot_interacted.bind(slot))
++	add_zone(Vector3(7.0, 0.0, 2.5), PAD_SIZE, PLACEHOLDER_COLOR, "Wardrobe\nComing soon")
++
++
++func _spawn_point(player_id: int) -> Vector3:
++	return Vector3((player_id - 1.5) * 1.5, 0.1, 3.0)
++
++
++func _process(delta: float) -> void:
++	_poll_joins(delta)
++	_update_text()
++
++
++func _slot_text(slot: int) -> String:
++	var state := SaveManager.peek_run(slot)
++	if state == null:
++		return "Slot %d\nNew run" % slot
++	return "Slot %d\nDay %d  %s" % [slot, state.day, UIKit.money(state.wallet)]
++
++
++func _on_slot_interacted(_player_id: int, slot: int) -> void:
++	if SaveManager.has_run(slot):
++		GameFlow.continue_run(slot)
++	else:
++		GameFlow.new_run(slot)
++	set_process(false)
++	set_physics_process(false)   # a second press must not start the run twice
++
++
++func _poll_joins(delta: float) -> void:
++	for source in InputSetup.available_sources():
++		if InputSetup.assigned_count() >= InputSetup.MAX_PLAYERS:
++			return
++		if InputSetup.is_assigned(source):
++			continue
++		if InputSetup.is_interact_pressed(source):
++			var held: float = _held.get(source, 0.0) + delta
++			_held[source] = held
++			if held >= HOLD_TIME:
++				_held.erase(source)
++				InputSetup.assign(source)
++				spawn_player(InputSetup.assigned_count())
++		else:
++			_held.erase(source)
++
++
++func _update_text() -> void:
++	var lines := PackedStringArray()
++	if InputSetup.assigned_count() < InputSetup.MAX_PLAYERS:
++		lines.append("Hold E, Enter or gamepad A to join")
++	if InputSetup.assigned_count() > 0:
++		lines.append("Stand on a slot and press interact to play")
++	lines.append("")
++	for player_id in range(1, InputSetup.MAX_PLAYERS + 1):
++		if player_id <= InputSetup.assigned_count():
++			lines.append("Player %d: %s" % [player_id, InputSetup.describe(InputSetup.source_of(player_id))])
++		else:
++			lines.append("Player %d: waiting..." % player_id)
++	for source in _held:
++		lines.append("Joining: %s %d%%" % [InputSetup.describe(source), roundi(_held[source] / HOLD_TIME * 100.0)])
++	_status.text = "\n".join(lines)
+diff --git a/scripts/world/hub.gd b/scripts/world/hub.gd
+new file mode 100644
+index 0000000..f950cc2
+--- /dev/null
++++ b/scripts/world/hub.gd
+@@ -0,0 +1,61 @@
++extends WalkableArea
++class_name Hub
++## In-run area reached every GameFlow.HUB_EVERY_N_DAYS days. Walk to the truck pad
++## with every player on it to start the next job (short countdown, cancelled if
++## anyone steps off). The shop is a placeholder for now.
++
++const COUNTDOWN_TIME := 3.0
++const TRUCK_FOOT_X := 2.0
++const TRUCK_PAD_CENTER := Vector3(0.5, 0.0, 0.0)
++const TRUCK_PAD_SIZE := Vector3(3.5, 0.1, 4.0)
++const TRUCK_PAD_COLOR := Color(0.4, 0.8, 0.5)
++const SHOP_CENTER := Vector3(-6.0, 0.0, -3.0)
++const SHOP_COLOR := Color(0.6, 0.6, 0.65)
++
++var _truck_pad: InteractZone
++var _status: Label
++var _countdown := -1.0
++
++
++func _init() -> void:
++	room_size = Vector2(30.0, 12.0)
++
++
++func _ready() -> void:
++	super()
++	assert(SaveManager.run != null, "Hub opened with no active run; start from the main menu")
++	_status = _build_hud("HUB")
++
++	var truck := MovingTruck.new()
++	truck.position = Vector3(TRUCK_FOOT_X, 0.0, 0.0)
++	add_child(truck)
++	truck.zone.active = false   # nothing is delivered in the hub
++
++	_truck_pad = add_zone(TRUCK_PAD_CENTER, TRUCK_PAD_SIZE, TRUCK_PAD_COLOR, _pad_text())
++	add_zone(SHOP_CENTER, Vector3(4.0, 0.1, 3.0), SHOP_COLOR, "Shop\nComing soon")
++
++
++func _spawn_point(player_id: int) -> Vector3:
++	return Vector3(-10.0 + (player_id - 1) * 1.5, 0.1, 3.0)
++
++
++func _process(delta: float) -> void:
++	var total := get_tree().get_nodes_in_group("players").size()
++	if total > 0 and _truck_pad.players_inside().size() == total:
++		if _countdown < 0.0:
++			_countdown = COUNTDOWN_TIME
++		_countdown -= delta
++		if _countdown <= 0.0:
++			GameFlow.start_job()
++			set_process(false)
++			return
++	else:
++		_countdown = -1.0
++
++	_truck_pad.set_text(_pad_text() if _countdown < 0.0 else "Starting in %d" % ceili(_countdown))
++	_status.text = "Day %d   Wallet %s\nAll players on the truck pad to start the day" % [
++		SaveManager.run.day, UIKit.money(SaveManager.run.wallet)]
++
++
++func _pad_text() -> String:
++	return "Truck\nStart day %d" % SaveManager.run.day

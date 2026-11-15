@@ -1,0 +1,273 @@
+diff --git a/project.godot b/project.godot
+index 120f593..ddbc1a0 100644
+--- a/project.godot
++++ b/project.godot
+@@ -18,6 +18,7 @@ config/icon="res://icon.svg"
+ [autoload]
+ 
+ InputSetup="*uid://c4ay3ep4hxwj3"
++SaveManager="*res://scripts/progression/save_manager.gd"
+ 
+ [display]
+ 
+diff --git a/scripts/progression/run_state.gd b/scripts/progression/run_state.gd
+new file mode 100644
+index 0000000..d513593
+--- /dev/null
++++ b/scripts/progression/run_state.gd
+@@ -0,0 +1,54 @@
++extends Resource
++class_name RunState
++## State of one run (a sequence of days). Lives in a run slot and is wiped when
++## the run dies; anything that must outlive a run belongs in ProfileState.
++##
++## Pure data: no file I/O here. SaveManager reads and writes it, and only at
++## day boundaries.
++
++const VERSION := 1
++
++var slot := 1
++var wallet := 0.0
++var day := 1
++var perks: Array[String] = []
++
++
++func to_dict() -> Dictionary:
++	return {
++		"version": VERSION,
++		"slot": slot,
++		"wallet": wallet,
++		"day": day,
++		"perks": perks.duplicate(),
++	}
++
++
++## Expects a Dictionary parsed from JSON (so numbers are floats). Returns null
++## and pushes an error naming the problem if the data is not a valid RunState.
++static func from_dict(data: Dictionary) -> RunState:
++	if not _is_number(data.get("version")) or int(data["version"]) != VERSION:
++		push_error("RunState: unsupported version %s (expected %d)" % [data.get("version"), VERSION])
++		return null
++	for key in ["slot", "wallet", "day"]:
++		if not _is_number(data.get(key)):
++			push_error("RunState: '%s' is missing or not a number" % key)
++			return null
++	if typeof(data.get("perks")) != TYPE_ARRAY:
++		push_error("RunState: 'perks' is missing or not an array")
++		return null
++
++	var state := RunState.new()
++	state.slot = int(data["slot"])
++	state.wallet = float(data["wallet"])
++	state.day = int(data["day"])
++	for perk in data["perks"]:
++		if typeof(perk) != TYPE_STRING:
++			push_error("RunState: 'perks' contains a non-string entry")
++			return null
++		state.perks.append(perk)
++	return state
++
++
++static func _is_number(value: Variant) -> bool:
++	return typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT
+diff --git a/scripts/progression/profile_state.gd b/scripts/progression/profile_state.gd
+new file mode 100644
+index 0000000..c939d7c
+--- /dev/null
++++ b/scripts/progression/profile_state.gd
+@@ -0,0 +1,47 @@
++extends Resource
++class_name ProfileState
++## Data that persists across runs: unlocks and owned cosmetics. Stored apart from
++## the run slots so a dead run can be wiped without touching it.
++##
++## Pure data: no file I/O here. SaveManager reads and writes it, and only at
++## day boundaries.
++
++const VERSION := 1
++
++var unlocks: Array[String] = []
++var cosmetics: Array[String] = []
++
++
++func to_dict() -> Dictionary:
++	return {
++		"version": VERSION,
++		"unlocks": unlocks.duplicate(),
++		"cosmetics": cosmetics.duplicate(),
++	}
++
++
++## Expects a Dictionary parsed from JSON. Returns null and pushes an error
++## naming the problem if the data is not a valid ProfileState.
++static func from_dict(data: Dictionary) -> ProfileState:
++	if typeof(data.get("version")) not in [TYPE_INT, TYPE_FLOAT] or int(data["version"]) != VERSION:
++		push_error("ProfileState: unsupported version %s (expected %d)" % [data.get("version"), VERSION])
++		return null
++
++	var state := ProfileState.new()
++	if not _read_strings(data, "unlocks", state.unlocks):
++		return null
++	if not _read_strings(data, "cosmetics", state.cosmetics):
++		return null
++	return state
++
++
++static func _read_strings(data: Dictionary, key: String, out: Array[String]) -> bool:
++	if typeof(data.get(key)) != TYPE_ARRAY:
++		push_error("ProfileState: '%s' is missing or not an array" % key)
++		return false
++	for entry in data[key]:
++		if typeof(entry) != TYPE_STRING:
++			push_error("ProfileState: '%s' contains a non-string entry" % key)
++			return false
++		out.append(entry)
++	return true
+diff --git a/scripts/progression/save_manager.gd b/scripts/progression/save_manager.gd
+new file mode 100644
+index 0000000..4789379
+--- /dev/null
++++ b/scripts/progression/save_manager.gd
+@@ -0,0 +1,142 @@
++extends Node
++## Autoload "SaveManager". Owns the active run and the persistent profile, and
++## reads and writes them as JSON in user://.
++##
++## The game saves only at day boundaries, never mid-job. begin_day(), end_day()
++## and end_run() are the only functions that write to disk. Quitting during a job
++## therefore resumes from the start of that day.
++##
++## Files: user://run_slot_N.json (N = 1..SLOT_COUNT) and user://profile.json.
++## A missing file is normal (empty slot, first launch). A corrupt or
++## wrong-version file is an error and is never silently replaced.
++
++const SLOT_COUNT := 3
++const PROFILE_PATH := "user://profile.json"
++
++## Persistent across runs. Always valid after _ready().
++var profile: ProfileState
++## The active run, or null when no run is in progress (e.g. in the hub).
++var run: RunState
++
++
++func _ready() -> void:
++	profile = _read_profile()
++
++
++# --- run slots ------------------------------------------------------------
++
++func has_run(slot: int) -> bool:
++	return FileAccess.file_exists(_slot_path(slot))
++
++
++## Loads an existing slot as the active run.
++func continue_run(slot: int) -> void:
++	assert(has_run(slot), "continue_run: slot %d is empty" % slot)
++	var state := RunState.from_dict(_read_json(_slot_path(slot)))
++	if state == null:
++		_fail("Run slot %d is invalid (see error above)" % slot)
++		return
++	assert(state.slot == slot, "Run slot %d file says it belongs to slot %d" % [slot, state.slot])
++	run = state
++
++
++## Starts a fresh run in `slot` in memory only. Nothing is written (and an
++## existing run in that slot is not touched) until begin_day().
++func new_run(slot: int) -> void:
++	_slot_path(slot)   # validates the slot number
++	run = RunState.new()
++	run.slot = slot
++
++
++## Call when a day starts. Writes the run and the profile.
++func begin_day() -> void:
++	assert(run != null, "begin_day called with no active run")
++	_write_run()
++	_write_profile()
++
++
++## Call when a day ends. `result` is the ContractTracker result dictionary; its
++## payment goes into the wallet and the day counter advances. Writes the run and
++## the profile.
++func end_day(result: Dictionary) -> void:
++	assert(run != null, "end_day called with no active run")
++	assert(result.has("payment"), "end_day: result has no 'payment'")
++	run.wallet += float(result["payment"])
++	run.day += 1
++	_write_run()
++	_write_profile()
++
++
++## Call when a run dies. Deletes the run slot, keeps the profile, and clears the
++## active run.
++func end_run() -> void:
++	assert(run != null, "end_run called with no active run")
++	var path := _slot_path(run.slot)
++	if FileAccess.file_exists(path):
++		var err := DirAccess.remove_absolute(path)
++		if err != OK:
++			_fail("Could not delete %s: %s" % [path, error_string(err)])
++			return
++	run = null
++	_write_profile()
++
++
++# --- files ----------------------------------------------------------------
++
++func _slot_path(slot: int) -> String:
++	assert(slot >= 1 and slot <= SLOT_COUNT, "Run slot %d is out of range 1..%d" % [slot, SLOT_COUNT])
++	return "user://run_slot_%d.json" % slot
++
++
++func _read_profile() -> ProfileState:
++	if not FileAccess.file_exists(PROFILE_PATH):
++		return ProfileState.new()   # first launch
++	var state := ProfileState.from_dict(_read_json(PROFILE_PATH))
++	if state == null:
++		_fail("Profile %s is invalid (see error above)" % PROFILE_PATH)
++		return ProfileState.new()
++	return state
++
++
++func _write_run() -> void:
++	_write_json(_slot_path(run.slot), run.to_dict())
++
++
++func _write_profile() -> void:
++	_write_json(PROFILE_PATH, profile.to_dict())
++
++
++func _read_json(path: String) -> Dictionary:
++	var file := FileAccess.open(path, FileAccess.READ)
++	if file == null:
++		_fail("Could not open %s: %s" % [path, error_string(FileAccess.get_open_error())])
++		return {}
++	var parser := JSON.new()
++	var err := parser.parse(file.get_as_text())
++	if err != OK:
++		_fail("%s is not valid JSON (line %d): %s" % [path, parser.get_error_line(), parser.get_error_message()])
++		return {}
++	if typeof(parser.data) != TYPE_DICTIONARY:
++		_fail("%s does not contain a JSON object" % path)
++		return {}
++	return parser.data
++
++
++## Writes to a temp file and renames it over the target, so a crash mid-write
++## cannot leave a half-written save.
++func _write_json(path: String, data: Dictionary) -> void:
++	var temp := path + ".tmp"
++	var file := FileAccess.open(temp, FileAccess.WRITE)
++	if file == null:
++		_fail("Could not open %s for writing: %s" % [temp, error_string(FileAccess.get_open_error())])
++		return
++	file.store_string(JSON.stringify(data, "\t"))
++	file.close()
++	var err := DirAccess.rename_absolute(temp, path)
++	if err != OK:
++		_fail("Could not move %s to %s: %s" % [temp, path, error_string(err)])
++
++
++func _fail(message: String) -> void:
++	push_error("SaveManager: " + message)
++	assert(false, message)

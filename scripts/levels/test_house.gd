@@ -27,6 +27,9 @@ const FURNITURE_MODEL_SCALE := 0.6
 ## World x of the truck ramp's foot, just outside the east exit.
 const TRUCK_FOOT_X := 7.0
 
+## Seconds after the job loads before furniture can take damage (spawn settling is free).
+const SETTLE_TIME := 1.5
+
 ## Spawn point per player id (index = id - 1).
 const PLAYER_SPAWNS := [Vector3(-3.0, 0.1, 2.5), Vector3(-2.0, 0.1, 2.5)]
 
@@ -55,31 +58,29 @@ var _keep_clear: Array[AABB] = []
 
 
 func _ready() -> void:
+	assert(SaveManager.run != null, "Job started with no active run; start from the main menu")
 	_build_environment()
 	_build_house()
 	var zone := _build_truck()
-	zone.active = false
 	add_child(IsoCamera.new())
 	add_child(DebugOverlay.new())
 	var items := _spawn_furniture()
 
 	for player_id in range(1, InputSetup.assigned_count() + 1):
 		_spawn_player(player_id)
-	var lobby := Lobby.new()
-	lobby.player_joined.connect(_spawn_player)
-	lobby.started.connect(_start_job.bind(zone, items))
-	add_child(lobby)
+	SaveManager.begin_day()
+	_start_job(zone, items)
 
 
 func _start_job(zone: DeliveryZone, items: Array[Furniture]) -> void:
-	for player: Player in get_tree().get_nodes_in_group("players"):
-		player.can_interact = true
-	for item in items:
-		item.damage_enabled = true
 	zone.active = true
 	var tracker := ContractTracker.new()
 	add_child(tracker)
 	tracker.setup(zone, items)
+	# Items drop onto the floor when spawned; let them settle before impacts cost money.
+	await get_tree().create_timer(SETTLE_TIME).timeout
+	for item in items:
+		item.damage_enabled = true
 
 
 # --- world ----------------------------------------------------------------
@@ -270,7 +271,6 @@ func _build_truck() -> DeliveryZone:
 func _spawn_player(player_id: int) -> void:
 	var p := Player.new()
 	p.player_id = player_id
-	p.can_interact = false
 	if PLAYER_MODELS.has(player_id):
 		p.model_scene = load(PLAYER_MODELS[player_id])
 	p.position = PLAYER_SPAWNS[player_id - 1]

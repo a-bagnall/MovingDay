@@ -29,14 +29,22 @@ func has_run(slot: int) -> bool:
 	return FileAccess.file_exists(_slot_path(slot))
 
 
-## Loads an existing slot as the active run.
-func continue_run(slot: int) -> void:
-	assert(has_run(slot), "continue_run: slot %d is empty" % slot)
+## Reads a slot without making it the active run (for menus). Null if empty.
+func peek_run(slot: int) -> RunState:
+	if not has_run(slot):
+		return null
 	var state := RunState.from_dict(_read_json(_slot_path(slot)))
 	if state == null:
 		_fail("Run slot %d is invalid (see error above)" % slot)
-		return
+		return null
 	assert(state.slot == slot, "Run slot %d file says it belongs to slot %d" % [slot, state.slot])
+	return state
+
+
+## Loads an existing slot as the active run.
+func continue_run(slot: int) -> void:
+	var state := peek_run(slot)
+	assert(state != null, "continue_run: slot %d is empty" % slot)
 	run = state
 
 

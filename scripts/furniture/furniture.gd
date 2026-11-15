@@ -51,7 +51,7 @@ static var _dust_curve: Curve
 var total_damage: float = 0.0
 var in_truck: bool = false
 var is_delivered: bool = false
-## False in the lobby so settling and nudges cost nothing.
+## False until the job's settle period ends, so spawn settling and nudges cost nothing.
 var damage_enabled: bool = true
 
 ## Last notable impact (m/s of velocity change) and seconds since, for the debug overlay.
