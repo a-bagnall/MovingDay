@@ -12,6 +12,11 @@ var slot := 1
 var wallet := 0.0
 var day := 1
 var perks: Array[String] = []
+## One-day shop boosts. The day number prevents them carrying into later jobs.
+var speed_boost_day := 0
+var speed_boost := 1.0
+var acceleration_boost_day := 0
+var acceleration_boost := 1.0
 
 
 func to_dict() -> Dictionary:
@@ -21,6 +26,10 @@ func to_dict() -> Dictionary:
 		"wallet": wallet,
 		"day": day,
 		"perks": perks.duplicate(),
+		"speed_boost_day": speed_boost_day,
+		"speed_boost": speed_boost,
+		"acceleration_boost_day": acceleration_boost_day,
+		"acceleration_boost": acceleration_boost,
 	}
 
 
@@ -42,6 +51,11 @@ static func from_dict(data: Dictionary) -> RunState:
 	state.slot = int(data["slot"])
 	state.wallet = float(data["wallet"])
 	state.day = int(data["day"])
+	# Optional for backwards compatibility with existing version-1 save slots.
+	state.speed_boost_day = int(data.get("speed_boost_day", 0))
+	state.speed_boost = float(data.get("speed_boost", 1.0))
+	state.acceleration_boost_day = int(data.get("acceleration_boost_day", 0))
+	state.acceleration_boost = float(data.get("acceleration_boost", 1.0))
 	for perk in data["perks"]:
 		if typeof(perk) != TYPE_STRING:
 			push_error("RunState: 'perks' contains a non-string entry")

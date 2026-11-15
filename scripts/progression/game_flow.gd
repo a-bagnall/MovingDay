@@ -111,6 +111,7 @@ func _reset_day_state() -> void:
 		"payment": 0.0,
 		"base_pay": 0.0,
 		"time_bonus": 0.0,
+		"style_bonus": 0.0,
 		"damage": 0.0,
 		"time": 0.0,
 		"contracts_completed": 0,
@@ -120,7 +121,7 @@ func _reset_day_state() -> void:
 
 
 func _accumulate_day_result(result: Dictionary) -> void:
-	for key in ["payment", "base_pay", "time_bonus", "damage", "time"]:
+	for key in ["payment", "base_pay", "time_bonus", "style_bonus", "damage", "time"]:
 		day_total[key] = float(day_total.get(key, 0.0)) + float(result.get(key, 0.0))
 	day_total["contracts_completed"] = day_contract_count
 

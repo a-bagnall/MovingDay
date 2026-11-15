@@ -96,7 +96,7 @@ func _build_previous_panel() -> Control:
 		return panel
 
 	var result := GameFlow.previous_contract_result
-	var receipt := _contract_label("PROPERTY %02d\n%s\n--------------------------------\nItems delivered: %s\nCompletion: %d%%\nTime: %s\nBase pay: %s\nTime bonus: +%s\nDamage: -%s\n--------------------------------\nPAYMENT: %s" % [
+	var receipt := _contract_label("PROPERTY %02d\n%s\n--------------------------------\nItems delivered: %s\nCompletion: %d%%\nTime: %s\nBase pay: %s\nTime bonus: +%s\nStyle bonus: +%s\nDamage: -%s\n--------------------------------\nPAYMENT: %s" % [
 		GameFlow.day_contract_count,
 		str(result.get("client_name", "Previous client")),
 		str(result.get("items_delivered", "-")),
@@ -104,6 +104,7 @@ func _build_previous_panel() -> Control:
 		UIKit.format_time(float(result.get("time", 0.0))),
 		UIKit.money(float(result.get("base_pay", 0.0))),
 		UIKit.money(float(result.get("time_bonus", 0.0))),
+		UIKit.money(float(result.get("style_bonus", 0.0))),
 		UIKit.money(float(result.get("damage", 0.0))),
 		UIKit.money(float(result.get("payment", 0.0))),
 	])
@@ -123,10 +124,11 @@ func _build_next_panel() -> Control:
 		column.add_child(_contract_label("END OF DAY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
 		column.add_child(_contract_label("No more contracts today. Your team has finished the shift.", UIKit.FONT_BODY))
 		column.add_child(_contract_label("DAY TOTAL", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-		column.add_child(_contract_label("Contracts completed: %d\nTotal base pay: %s\nTime bonuses: %s\nDamage costs: -%s\n\nTAKE-HOME: %s" % [
+		column.add_child(_contract_label("Contracts completed: %d\nTotal base pay: %s\nTime bonuses: %s\nStyle bonuses: %s\nDamage costs: -%s\n\nTAKE-HOME: %s" % [
 			int(GameFlow.day_total.get("contracts_completed", 0)),
 			UIKit.money(float(GameFlow.day_total.get("base_pay", 0.0))),
 			UIKit.money(float(GameFlow.day_total.get("time_bonus", 0.0))),
+			UIKit.money(float(GameFlow.day_total.get("style_bonus", 0.0))),
 			UIKit.money(float(GameFlow.day_total.get("damage", 0.0))),
 			UIKit.money(float(GameFlow.day_total.get("payment", 0.0))),
 		], UIKit.FONT_BODY))

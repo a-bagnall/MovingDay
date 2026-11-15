@@ -130,7 +130,15 @@ func _finish() -> void:
 	var completion := float(delivered) / float(maxi(required.size(), 1))
 	var base := contract.payout * completion if contract else 500.0 * completion
 	var time_bonus := maxf(0.0, PAR_TIME - elapsed) * TIME_BONUS_RATE
-	var payment := maxf(0.0, base + time_bonus - damage)
+	var style_rate := 0.0
+	if SaveManager.profile != null:
+		match SaveManager.profile.equipped_outfit:
+			"workwear":
+				style_rate = 0.10
+			"enchanted_workwear":
+				style_rate = 0.15
+	var style_bonus := (base + time_bonus) * style_rate
+	var payment := maxf(0.0, base + time_bonus + style_bonus - damage)
 	var result := {
 		"client_name": contract.client_name if contract else "Client",
 		"contract_number": contract.contract_number if contract else 1,
@@ -140,6 +148,7 @@ func _finish() -> void:
 		"time": elapsed,
 		"base_pay": base,
 		"time_bonus": time_bonus,
+		"style_bonus": style_bonus,
 		"payment": payment,
 	}
 	contract_finished.emit(result)

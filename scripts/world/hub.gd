@@ -1,20 +1,26 @@
 extends WalkableArea
 class_name Hub
-## In-run area reached every GameFlow.HUB_EVERY_N_DAYS days. Walk to the truck pad
-## with every player on it to start the next job (short countdown, cancelled if
-## anyone steps off). The shop is a placeholder for now.
+## In-run area reached every GameFlow.HUB_EVERY_N_DAYS days. Players can buy
+## one-day drinks and permanent outfit unlocks before walking to the truck pad.
 
 const COUNTDOWN_TIME := 3.0
 const TRUCK_FOOT_X := 2.0
 const TRUCK_PAD_CENTER := Vector3(0.5, 0.0, 0.0)
 const TRUCK_PAD_SIZE := Vector3(3.5, 0.1, 4.0)
 const TRUCK_PAD_COLOR := Color(0.4, 0.8, 0.5)
-const SHOP_CENTER := Vector3(-6.0, 0.0, -3.0)
-const SHOP_COLOR := Color(0.6, 0.6, 0.65)
+
+const SHOP_ITEMS := {
+	"coffee": {"name": "Coffee", "price": 50, "description": "+15% move speed for the next day"},
+	"energy": {"name": "Energy Drink", "price": 60, "description": "+20% acceleration for the next day"},
+	"workwear": {"name": "Company Outfit", "price": 150, "description": "+10% earnings style bonus"},
+	"enchanted_workwear": {"name": "Lucky Enchanted Outfit", "price": 400, "description": "+15% earnings style bonus"},
+}
 
 var _truck_pad: InteractZone
 var _status: Label
 var _countdown := -1.0
+var _notice := ""
+var _notice_time := 0.0
 
 
 func _init() -> void:
@@ -24,7 +30,7 @@ func _init() -> void:
 func _ready() -> void:
 	super()
 	assert(SaveManager.run != null, "Hub opened with no active run; start from the main menu")
-	_status = _build_hud("HUB")
+	_status = _build_hud("HUB SHOP")
 
 	var truck := MovingTruck.new()
 	truck.position = Vector3(TRUCK_FOOT_X, 0.0, 0.0)
@@ -32,11 +38,21 @@ func _ready() -> void:
 	truck.zone.active = false   # nothing is delivered in the hub
 
 	_truck_pad = add_zone(TRUCK_PAD_CENTER, TRUCK_PAD_SIZE, TRUCK_PAD_COLOR, _pad_text())
-	add_zone(SHOP_CENTER, Vector3(4.0, 0.1, 3.0), SHOP_COLOR, "Shop\nComing soon")
+	_add_shop_pad("coffee", Vector3(-10.0, 0.0, -3.0), Color("#9b704e"))
+	_add_shop_pad("energy", Vector3(-6.0, 0.0, -3.0), Color("#8b9d55"))
+	_add_shop_pad("workwear", Vector3(-2.0, 0.0, -3.0), Color("#668ca8"))
+	_add_shop_pad("enchanted_workwear", Vector3(-10.0, 0.0, 0.0), Color("#a58ac5"))
+
+
+func _add_shop_pad(item_id: String, center: Vector3, color: Color) -> void:
+	var item: Dictionary = SHOP_ITEMS[item_id]
+	var text := "%s\n%s\n%s" % [item.name, UIKit.money(float(item.price)), item.description]
+	var zone := add_zone(center, Vector3(3.2, 0.1, 2.2), color, text)
+	zone.interacted.connect(_on_shop_interacted.bind(item_id))
 
 
 func _spawn_point(player_id: int) -> Vector3:
-	return Vector3(-10.0 + (player_id - 1) * 1.5, 0.1, 3.0)
+	return Vector3(-13.0 + (player_id - 1) * 1.5, 0.1, 3.0)
 
 
 func _process(delta: float) -> void:
@@ -53,8 +69,49 @@ func _process(delta: float) -> void:
 		_countdown = -1.0
 
 	_truck_pad.set_text(_pad_text() if _countdown < 0.0 else "Starting in %d" % ceili(_countdown))
-	_status.text = "Day %d   Wallet %s\nAll players on the truck pad to start the day" % [
+	_notice_time = maxf(0.0, _notice_time - delta)
+	var status_text := "Day %d   Wallet %s\nBuy a boost or outfit, then all players stand on the truck pad" % [
 		SaveManager.run.day, UIKit.money(SaveManager.run.wallet)]
+	if _notice_time > 0.0:
+		status_text += "\n" + _notice
+	_status.text = status_text
+
+
+func _on_shop_interacted(_player_id: int, item_id: String) -> void:
+	var item: Dictionary = SHOP_ITEMS[item_id]
+	var price := int(item.price)
+	if item_id in ["workwear", "enchanted_workwear"] and SaveManager.profile.cosmetics.has(item_id):
+		SaveManager.profile.equipped_outfit = item_id
+		_set_notice("%s equipped" % item.name)
+		return
+	if SaveManager.run.wallet < price:
+		_set_notice("Not enough money for %s" % item.name)
+		return
+
+	match item_id:
+		"coffee":
+			if SaveManager.run.speed_boost_day == SaveManager.run.day:
+				_set_notice("Coffee is already active for this day")
+				return
+			SaveManager.run.speed_boost_day = SaveManager.run.day
+			SaveManager.run.speed_boost = 1.15
+		"energy":
+			if SaveManager.run.acceleration_boost_day == SaveManager.run.day:
+				_set_notice("Your energy drink is already active for this day")
+				return
+			SaveManager.run.acceleration_boost_day = SaveManager.run.day
+			SaveManager.run.acceleration_boost = 1.20
+		"workwear", "enchanted_workwear":
+			SaveManager.profile.cosmetics.append(item_id)
+			SaveManager.profile.equipped_outfit = item_id
+
+	SaveManager.run.wallet -= price
+	_set_notice("Bought %s for %s" % [item.name, UIKit.money(price)])
+
+
+func _set_notice(message: String) -> void:
+	_notice = message
+	_notice_time = 3.0
 
 
 func _pad_text() -> String:

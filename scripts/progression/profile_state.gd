@@ -10,6 +10,7 @@ const VERSION := 1
 
 var unlocks: Array[String] = []
 var cosmetics: Array[String] = []
+var equipped_outfit := ""
 
 
 func to_dict() -> Dictionary:
@@ -17,6 +18,7 @@ func to_dict() -> Dictionary:
 		"version": VERSION,
 		"unlocks": unlocks.duplicate(),
 		"cosmetics": cosmetics.duplicate(),
+		"equipped_outfit": equipped_outfit,
 	}
 
 
@@ -31,6 +33,14 @@ static func from_dict(data: Dictionary) -> ProfileState:
 	if not _read_strings(data, "unlocks", state.unlocks):
 		return null
 	if not _read_strings(data, "cosmetics", state.cosmetics):
+		return null
+	var equipped: Variant = data.get("equipped_outfit", "")
+	if typeof(equipped) != TYPE_STRING:
+		push_error("ProfileState: 'equipped_outfit' is not a string")
+		return null
+	state.equipped_outfit = equipped
+	if state.equipped_outfit != "" and not state.cosmetics.has(state.equipped_outfit):
+		push_error("ProfileState: equipped outfit is not owned")
 		return null
 	return state
 

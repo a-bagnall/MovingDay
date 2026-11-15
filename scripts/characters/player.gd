@@ -29,6 +29,8 @@ const CAMERA_YAW := PI / 4.0
 
 ## Set each frame by the furniture being carried (1.0 = unencumbered).
 var speed_multiplier: float = 1.0
+var shop_speed_multiplier: float = 1.0
+var shop_acceleration_multiplier: float = 1.0
 var held_furniture: Furniture = null
 ## False in the main menu and hub: players can move but not grab.
 var can_interact := true
@@ -43,6 +45,11 @@ var _pop_tween: Tween
 
 func _ready() -> void:
 	_source = InputSetup.source_of(player_id)
+	if SaveManager.run != null:
+		if SaveManager.run.speed_boost_day == SaveManager.run.day:
+			shop_speed_multiplier = SaveManager.run.speed_boost
+		if SaveManager.run.acceleration_boost_day == SaveManager.run.day:
+			shop_acceleration_multiplier = SaveManager.run.acceleration_boost
 	_interact_prev = InputSetup.is_interact_pressed(_source)
 	add_to_group("players")
 	collision_layer = 1 << 1          # layer 2: players
@@ -102,8 +109,8 @@ func _physics_process(delta: float) -> void:
 	_check_stumble(input_dir, horizontal)
 
 	var control := 0.25 if _stumble_left > 0.0 else 1.0
-	var target := input_dir * max_speed * speed_multiplier * control
-	var rate := acceleration if input_dir.length() > 0.01 else braking
+	var target := input_dir * max_speed * shop_speed_multiplier * speed_multiplier * control
+	var rate := acceleration * shop_acceleration_multiplier if input_dir.length() > 0.01 else braking
 	rate *= lerpf(0.5, 1.0, speed_multiplier)
 	if horizontal.dot(target) < 0.0:
 		rate *= reversal_penalty
