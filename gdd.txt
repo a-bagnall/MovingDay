@@ -1,0 +1,623 @@
+MOVING DAY
+Game Design Document & AI Development Handoff
+Document Version: 0.1
+Project Status: Pre-production / Initial implementation
+Engine: Godot 4.x
+Language: GDScript
+Genre: Cooperative physics-based party game
+Players: 2-player local and online co-op
+Camera: Fixed 3D isometric
+Art Direction: Stylised low-poly
+
+PART 1 — GAME DESIGN DOCUMENT
+1. Game Overview
+High Concept
+Moving Day is a two-player cooperative physics-based party game in which players operate a small removalist company.
+Players take on removal contracts, enter procedurally generated houses, carefully remove furniture and belongings, and load everything into their moving truck.
+The challenge comes from deliberately awkward character movement, physics-driven furniture handling, environmental obstacles and the need for constant cooperation.
+Players must balance speed and efficiency against the risk of damaging customer belongings.
+Between jobs, players return to their company headquarters to purchase upgrades, unlock cosmetics, improve their equipment and accept increasingly difficult contracts.
+Design Inspiration
+The game takes inspiration from:
+- PlateUp! — Progression, business management, character customisation, replayability and the accessible isometric presentation.
+- Moving Out — Cooperative furniture handling, slapstick physics and chaotic removalist gameplay.
+- Overcooked — Time pressure, communication and increasingly challenging scenarios.
+These are reference points rather than templates to reproduce. Moving Day should establish its own identity through its removalist theme, character designs and cooperative physics.
+Design Pillars
+1. Cooperation: Players should genuinely depend on each other to complete certain tasks.
+2. Controlled chaos: Physics should create funny situations without making the game uncontrollable.
+3. Replayability: Procedurally assembled properties should make contracts feel different.
+4. Personality: Cute animal characters and cosmetic customisation should give players ownership over their characters.
+5. Progression: Players should feel that their removalist company is developing over time.
+
+2. Visual Direction
+Camera and Perspective
+- 3D isometric perspective.
+- Fixed camera orientation.
+- Orthographic projection preferred.
+- Elevated camera angle similar to PlateUp!.
+- Camera should frame both players and the relevant gameplay area.
+- Room walls should support cutaway or visibility effects when obstructing gameplay.
+The camera should prioritise gameplay readability over cinematic presentation.
+Art Style
+Stylised low-poly 3D.
+Desired characteristics:
+- Chunky geometry.
+- Simplified shapes.
+- Exaggerated proportions.
+- Soft, readable colour palettes.
+- Simple materials.
+- Distinct object silhouettes.
+- Minimal unnecessary surface detail.
+The game should look cohesive rather than like a collection of unrelated asset packs.
+Environment
+Properties should feel like recognisable houses while remaining readable from the isometric perspective.
+Initial environments:
+- Suburban family home.
+- Apartment.
+- Luxury mansion.
+- Old farmhouse.
+- Cluttered hoarder house.
+Environment assets should be modular and reusable.
+
+3. Playable Characters
+Animal Selection
+The initial playable roster consists of six bipedal animals:
+1. Raccoon
+2. Bear
+3. Fox
+4. Rabbit
+5. Capybara
+6. Penguin
+All characters should be bipedal and capable of performing the same gameplay actions.
+Characters should have:
+- Oversized heads.
+- Chunky bodies.
+- Short limbs.
+- Distinctive animal features.
+- Expressive facial features.
+- Readable silhouettes.
+The animals should remain cute and approachable, with exaggerated proportions that suit the game's comedic movement.
+Character Architecture
+Use a shared character skeleton and animation architecture wherever practical.
+Species-specific features should be implemented through interchangeable or species-specific meshes attached to the shared rig.
+Examples:
+- Raccoon mask markings and striped tail.
+- Bear ears and rounded muzzle.
+- Fox ears and bushy tail.
+- Rabbit ears and small tail.
+- Capybara muzzle and rounded ears.
+- Penguin body shape and flippers.
+Avoid implementing six entirely independent character controllers.
+Character Customisation
+Character customisation is an important feature and should be included in the development roadmap.
+Initial customisation categories:
+CategoryExamplesHatsBaseball caps, hard hats, beaniesGlassesSunglasses, round glasses, novelty glassesScarvesDifferent styles and coloursShirtsWork shirts, hoodies, singletsPantsCargo pants, jeans, work trousersColoursClothing colour variationsAccessoriesWatches, backpacks and other small items
+Cosmetics should be visual only.
+Animal species and clothing must not provide gameplay advantages.
+Company Uniforms
+Players should eventually be able to customise the removalist company's branding.
+Potential features:
+- Company colour scheme.
+- Matching uniforms.
+- Company logo.
+- Optional player-specific uniform variations.
+Players should be able to wear matching outfits or deliberately dress differently.
+Character Animations
+Initial animation requirements:
+- Idle.
+- Walking.
+- Running.
+- Turning.
+- Picking up.
+- Carrying.
+- Struggling under heavy objects.
+- Dropping furniture.
+- Stumbling.
+- Celebrating.
+- Interacting with the truck.
+Animations should exaggerate the physical comedy without making character movement difficult to read.
+
+4. Movement System
+Movement should be intentionally less precise than conventional character controllers.
+The objective is to make movement feel physical and slightly awkward while remaining responsive.
+Movement Characteristics
+- Acceleration rather than instant maximum speed.
+- Momentum when moving.
+- Gradual braking.
+- Turning inertia.
+- Reduced control when carrying heavy objects.
+- Increased difficulty when changing direction quickly.
+- Occasional stumbling from particularly abrupt movements or collisions.
+Movement Philosophy
+Characters should not feel like they are simply moving across a grid.
+Players should learn to anticipate momentum and coordinate their movements.
+However, the controls must remain predictable enough that players can improve through practice.
+Camera-relative Input
+Movement input should be translated relative to the fixed isometric camera orientation.
+This prevents directional confusion caused by the elevated camera angle.
+
+5. Furniture and Physics
+Furniture handling is the central gameplay mechanic.
+Every removable object should have configurable physical and gameplay properties.
+Furniture Properties
+PropertyDescriptionMassPhysical weight of the objectDimensionsPhysical size and doorway clearanceFragilitySensitivity to damageMonetary valueFinancial penalty if damagedCarry capacityNumber of players requiredGrip positionsLocations where players can hold the objectHandling typeHeavy, fragile, awkward, oversized, etc.
+Initial Furniture Types
+- Cardboard boxes.
+- Sofas.
+- Refrigerators.
+- Televisions.
+- Dining tables.
+- Wardrobes.
+- Beds.
+- Cabinets.
+- Chairs.
+- Desks.
+- Pianos.
+- Glass cabinets.
+- Lamps.
+- Decorative objects.
+Start with approximately 15–20 furniture and object types.
+Cooperative Carrying
+Large furniture should require both players.
+Example: carrying a sofa.
+1. Both players approach the sofa.
+2. Each player interacts to grab an available grip position.
+3. The furniture becomes cooperatively constrained between the characters.
+4. Both players influence the movement of the object.
+5. Differences in direction and speed create rotation and instability.
+6. Players must coordinate to navigate doorways and obstacles.
+If one player moves too quickly, the furniture should rotate or swing.
+If players move in opposing directions, the object should become difficult to control.
+Dropping furniture should create consequences.
+Physics Implementation
+Use Godot 4's 3D physics system.
+Recommended components:
+- CharacterBody3D for player movement.
+- RigidBody3D for furniture.
+- CollisionShape3D for collision geometry.
+- Controlled spring forces for cooperative carrying.
+- Torque and damping for rotational behaviour.
+Avoid simply teleporting furniture to a fixed position in front of a player.
+The carrying system should preserve physical interactions while providing enough control for enjoyable gameplay.
+Use configurable physics parameters per object.
+Damage System
+Damage should depend on:
+- Impact velocity.
+- Object fragility.
+- Object monetary value.
+- Collision type.
+- Potentially the surface involved.
+Examples:
+- Scraping a sofa against a wall may cause minor damage.
+- Dropping a television may cause significant damage.
+- Colliding a fragile cabinet with a doorway may damage it.
+- Low-speed contact should not automatically count as damage.
+Damage should be readable to the player through visual feedback, sound effects and scoring.
+
+6. Procedural House Generation
+Procedural house generation is a major feature.
+The preferred approach is prefab-based procedural generation rather than generating arbitrary geometry.
+Modular Environment Components
+Rooms
+- Living room.
+- Kitchen.
+- Bedroom.
+- Bathroom.
+- Garage.
+- Dining room.
+- Hallway.
+Structural components
+- Walls.
+- Corners.
+- Windows.
+- Doors.
+- Floors.
+- Ceiling sections.
+Connectors
+- Doorways.
+- Straight hallways.
+- Corner hallways.
+- Staircases.
+- Garage connections.
+Generation Process
+1. Select a contract difficulty and property template.
+2. Determine the required number of rooms.
+3. Generate a connected room graph.
+4. Place modular room prefabs.
+5. Connect rooms through compatible doorways and hallways.
+6. Populate rooms with appropriate furniture.
+7. Place environmental obstacles.
+8. Define the property exit and moving truck location.
+9. Validate navigation and furniture clearance.
+Important Generation Constraint
+Procedural generation must produce playable houses.
+Furniture must be removable.
+The system should avoid situations where:
+- Furniture cannot fit through a doorway.
+- Rooms are disconnected.
+- The exit is inaccessible.
+- Furniture spawns inside structural geometry.
+- The truck cannot be reached.
+- Objects are trapped behind obstacles.
+Implement a validation and retry mechanism.
+Difficulty Scaling
+Difficulty can increase through:
+- More rooms.
+- Larger properties.
+- Narrower doorways.
+- More furniture.
+- Heavier furniture.
+- Higher-value fragile objects.
+- More environmental obstacles.
+- Additional time pressure.
+
+7. Core Gameplay Loop
+The primary gameplay loop is:
+Company headquarters → Contract selection → Property generation → Removal operation → Truck loading → Results → Upgrades → Next contract.
+Company Headquarters
+Players can:
+- Select their animal characters.
+- Customise appearance.
+- Select company uniforms.
+- Purchase equipment.
+- Review company progression.
+- Accept new contracts.
+Contract Selection
+Contracts should communicate:
+- Property type.
+- Expected furniture.
+- Difficulty.
+- Estimated duration.
+- Potential payment.
+- Damage risk.
+- Optional objectives.
+Removal Operation
+Players enter the property and remove the required belongings.
+They must:
+- Navigate the house.
+- Pick up objects.
+- Coordinate furniture handling.
+- Avoid damage.
+- Navigate obstacles.
+- Load the truck.
+Truck Loading
+The moving truck should have limited cargo capacity.
+Players must arrange furniture efficiently.
+Future mechanics could include:
+- Objects falling over during transport.
+- Poorly balanced loads.
+- Limited cargo space.
+- Different truck capacities.
+- Loading bonuses for efficient arrangements.
+Contract Results
+Calculate a final score based on:
+CategoryPurposeCompletionPercentage of required items deliveredDamageFinancial damage causedTimeHow quickly the contract was completedEfficiencyOptional objectives and efficient loadingCustomer satisfactionOverall job quality
+The final result determines payment and reputation.
+Progression
+Earned money can be spent on:
+- Equipment.
+- Moving dollies.
+- Protective blankets.
+- Carrying straps.
+- Better trucks.
+- Larger cargo capacity.
+- Ramps.
+- Company upgrades.
+- Cosmetic unlocks.
+The game should use a roguelite-inspired progression structure, with increasingly difficult contracts and meaningful purchasing decisions between jobs.
+
+8. Multiplayer
+The game must eventually support both local and online two-player co-op.
+Development Order
+1. Local co-op.
+2. Input abstraction and player identification.
+3. Multiplayer authority architecture.
+4. Online host/join functionality.
+5. Replicated player movement.
+6. Replicated furniture physics and interactions.
+7. Contract state synchronisation.
+Local Co-op
+Initial implementation:
+- Two players on one computer.
+- Separate input mappings.
+- Controller support planned.
+- Shared camera.
+Online Co-op
+Use Godot's MultiplayerAPI and ENet as the initial networking approach.
+The architecture should support:
+- Host and client.
+- Stable player identifiers.
+- Authoritative contract state.
+- Player movement synchronisation.
+- Furniture interaction synchronisation.
+- Damage and delivery synchronisation.
+The server/host should own important gameplay decisions such as:
+- Furniture delivery.
+- Damage calculations.
+- Contract completion.
+- Currency and scoring.
+Avoid synchronising cosmetic-only information every physics frame.
+Online multiplayer is not part of the initial local prototype acceptance criteria, but it is a required project milestone.
+
+PART 2 — TECHNICAL ARCHITECTURE
+9. Technology Stack
+ComponentTechnologyGame engineGodot 4.xPrimary languageGDScript3D modellingBlender 5.2PhysicsGodot PhysicsCharacter controllerCharacterBody3DFurnitureRigidBody3DCameraOrthographic Camera3DMultiplayerGodot MultiplayerAPI / ENetAsset formatGLB / glTFSave dataJSON or Godot Resource-based data
+Use Blender for original models, rigging and animation.
+Use Godot scenes and reusable resources for game integration.
+10. Suggested Project Structure
+MovingDay/
+├── project.godot
+│
+├── assets/
+│   ├── characters/
+│   │   ├── models/
+│   │   ├── rigs/
+│   │   ├── animations/
+│   │   └── cosmetics/
+│   │       ├── hats/
+│   │       ├── glasses/
+│   │       ├── scarves/
+│   │       ├── shirts/
+│   │       └── pants/
+│   │
+│   ├── furniture/
+│   │   ├── residential/
+│   │   ├── fragile/
+│   │   └── miscellaneous/
+│   │
+│   ├── environment/
+│   │   ├── rooms/
+│   │   ├── walls/
+│   │   ├── doors/
+│   │   └── decorations/
+│   │
+│   ├── vehicles/
+│   ├── materials/
+│   ├── audio/
+│   └── ui/
+│
+├── scenes/
+│   ├── main/
+│   ├── characters/
+│   ├── furniture/
+│   ├── environment/
+│   ├── levels/
+│   ├── vehicles/
+│   └── ui/
+│
+├── scripts/
+│   ├── characters/
+│   ├── physics/
+│   ├── furniture/
+│   ├── procedural/
+│   ├── contracts/
+│   ├── progression/
+│   ├── multiplayer/
+│   └── ui/
+│
+├── resources/
+│   ├── furniture/
+│   ├── characters/
+│   ├── contracts/
+│   └── cosmetics/
+│
+├── data/
+│   ├── furniture/
+│   ├── contracts/
+│   └── cosmetics/
+│
+└── docs/
+    ├── GAME_DESIGN.md
+    └── TECHNICAL_DESIGN.md
+
+PART 3 — DEVELOPMENT ROADMAP
+Milestone A: Movement Foundation
+Objective: Establish the fundamental player experience.
+Implement:
+- Godot project setup.
+- Fixed isometric camera.
+- Basic test environment.
+- Two local players.
+- Player movement.
+- Acceleration and momentum.
+- Turning and braking.
+- Basic collision.
+Acceptance criteria:
+- Two players can move independently.
+- Both players can navigate the environment.
+- Movement feels responsive but deliberately physical.
+- Camera remains readable.
+Milestone B: Furniture and Physics
+Objective: Establish the defining gameplay mechanic.
+Implement:
+- Furniture data model.
+- Physics-enabled furniture.
+- Object interaction.
+- Single-player carrying.
+- Cooperative carrying.
+- Drop mechanics.
+- Damage calculations.
+- Truck loading zone.
+Acceptance criteria:
+- Players can pick up and drop objects.
+- Two players can carry oversized objects.
+- Movement affects furniture orientation.
+- Collisions can produce damage.
+- Furniture can be delivered to the truck.
+Milestone C: Character Assets
+Objective: Establish the visual identity.
+Implement:
+- Six bipedal animal models.
+- Shared character rig.
+- Basic animation set.
+- Species-specific features.
+- Cosmetic attachment points.
+- Initial cosmetic catalogue.
+- Character selection UI.
+Acceptance criteria:
+- All six animals can be selected.
+- Characters use the shared gameplay controller.
+- Cosmetics can be equipped and removed.
+- Animations work across species.
+Milestone D: Procedural Properties
+Objective: Establish replayable environments.
+Implement:
+- Modular room kit.
+- Room graph generation.
+- Room connections.
+- Furniture placement.
+- Navigation validation.
+- Doorway clearance validation.
+- Property themes.
+- Difficulty scaling.
+Acceptance criteria:
+- Different houses can be generated.
+- Every room is reachable.
+- Furniture is accessible.
+- Properties have a valid exit and truck route.
+Milestone E: Complete Gameplay Loop
+Objective: Turn the prototype into a game.
+Implement:
+- Company headquarters.
+- Contract selection.
+- Contract briefing.
+- Job timer.
+- Delivery tracking.
+- Damage scoring.
+- Results screen.
+- Currency.
+- Purchasable upgrades.
+- Company reputation.
+- Save/load.
+Acceptance criteria:
+- Players can start and finish a complete removal contract.
+- Contract results are calculated correctly.
+- Players receive payment.
+- Upgrades persist between jobs.
+Milestone F: Online Multiplayer
+Objective: Support two players over a network.
+Implement:
+- Host/join interface.
+- ENet transport.
+- Player spawning.
+- Authority management.
+- Player synchronisation.
+- Furniture synchronisation.
+- Contract synchronisation.
+- Damage and delivery synchronisation.
+Acceptance criteria:
+- Two separate computers can complete the same contract.
+- Both players observe consistent furniture interactions.
+- Contract scoring is authoritative.
+- Network interruptions are handled gracefully.
+
+PART 4 — MVP DEFINITION
+The first playable version should be deliberately small.
+Required Features
+- Fixed isometric camera.
+- Two local players.
+- Basic character models.
+- Momentum-based movement.
+- One small handcrafted test house.
+- Five furniture types.
+- Single-player and cooperative carrying.
+- Basic collision damage.
+- Moving truck.
+- Delivery tracking.
+- Contract results screen.
+Explicitly Deferred
+- Online multiplayer.
+- Full character customisation.
+- All six finished animal models.
+- Procedural house generation.
+- Company headquarters.
+- Progression and unlocks.
+- Large furniture catalogue.
+- Multiple property themes.
+These features remain part of the intended game, but should not delay validation of the core gameplay.
+MVP Success Criteria
+The MVP succeeds if two players can enter a house, work together to remove furniture, experience funny but controllable physics interactions, load the truck and receive a meaningful result.
+The most important question is whether moving a sofa through a difficult doorway with another player is enjoyable.
+Everything else builds on that.
+
+PART 5 — AI AGENT HANDOFF
+Project Context
+You are assisting with the development of Moving Day, a 3D isometric cooperative removalist party game.
+The project has been designed conceptually but does not yet have a verified, runnable implementation.
+The user wants actual game development, including original 3D assets, character models, procedural environments, gameplay systems and progression.
+Do not treat concept art or placeholder geometry as completed game assets.
+Established Decisions
+These decisions have already been made and should be preserved:
+- Game name: Moving Day.
+- Engine: Godot 4.
+- Language: GDScript.
+- Camera: Fixed 3D isometric.
+- Multiplayer: Both local and online co-op.
+- Initial development: Local co-op first.
+- Art direction: Stylised low-poly.
+- Character design: Bipedal anthropomorphic animals.
+- Initial animal roster: Raccoon, bear, fox, rabbit, capybara and penguin.
+- Customisation: Hats, scarves, glasses, shirts, pants and colour variations.
+- Environment generation: Procedural assembly from handcrafted prefab components.
+- Gameplay: Physics-based cooperative furniture removal.
+- Progression: Removalist company management with contracts, earnings and upgrades.
+Important Design Constraints
+1. Keep the animals bipedal.
+2. All species should share a common gameplay architecture.
+3. Cosmetics must not provide gameplay advantages.
+4. Furniture carrying should involve actual physics rather than purely visual attachment.
+5. Large furniture should encourage genuine cooperation.
+6. Movement should have momentum but remain controllable.
+7. Procedural houses must be validated for navigability and furniture clearance.
+8. Local and online multiplayer should share the same gameplay architecture.
+9. Prioritise a playable game over premature asset catalogue expansion.
+Recommended Immediate Work
+Start with Milestone A and Milestone B.
+Do not begin by generating dozens of cosmetic assets or attempting to build the complete procedural generation system.
+First establish:
+- A clean Godot project.
+- A fixed isometric camera.
+- Two independently controlled players.
+- Camera-relative movement.
+- Acceleration and braking.
+- A basic test house.
+- Physics-enabled furniture.
+- Single-player carrying.
+- Two-player carrying.
+Then playtest the carrying mechanic.
+If the furniture interaction is not enjoyable, revise it before expanding the project.
+Asset Production Expectations
+Use Blender to create actual reusable 3D assets.
+The character production workflow should eventually include:
+1. Shared base character proportions.
+2. Shared skeleton.
+3. Species-specific meshes.
+4. UVs and materials.
+5. Cosmetic attachment points.
+6. Animation set.
+7. GLB export.
+8. Godot integration and testing.
+Procedural scripts are encouraged where they improve consistency and repeatability.
+However, avoid producing overly complicated procedural modelling systems when a simple reusable Blender asset would be more effective.
+Working Method
+- Work incrementally.
+- Keep the project runnable after each milestone.
+- Use modular scenes and reusable resources.
+- Avoid unnecessary dependencies.
+- Document important architecture decisions.
+- Use semantic Git commit messages.
+- Test actual gameplay rather than relying on code inspection alone.
+- Clearly distinguish implemented, tested and planned features.
+- Never claim an asset, feature or build exists unless it has actually been created.
+Current Project Status
+Concept: Established.
+Game design: Initial specification established in this document.
+Technical architecture: Proposed, not fully implemented.
+Godot project: Not yet delivered as a verified runnable project.
+3D assets: Not yet produced.
+Core gameplay: Not yet implemented or tested.
+Multiplayer: Planned, not implemented.
+The next task is to initialise the Godot project and implement the first playable local two-player movement and furniture-carrying prototype.
+
+End of Moving Day GDD and AI Handoff — Version 0.1

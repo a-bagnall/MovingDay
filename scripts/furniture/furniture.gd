@@ -8,8 +8,9 @@ class_name Furniture
 signal damaged(amount: float, total: float)
 
 @export var data: FurnitureData
-## Optional model. Its footprint should match data.size (collision uses data.size).
+## Optional model. Collision, grips and hold height are sized from its mesh bounds.
 @export var model_scene: PackedScene
+@export var model_scale: float = 1.0
 
 const GRIP_REACH := 0.5       ## Distance from the furniture end to where a player stands.
 const MAX_CARRY_ACCEL := 45.0
@@ -20,6 +21,7 @@ var total_damage: float = 0.0
 var in_truck: bool = false
 
 var _grips := PackedVector3Array()
+var _size: Vector3
 var _holders: Dictionary = {}   # grip index (int) -> Player
 var _damage_cooldown := 0.0
 var _flash := 0.0
@@ -45,8 +47,9 @@ func _ready() -> void:
 	pm.bounce = 0.05
 	physics_material_override = pm
 
-	_build_collision()
+	_size = data.size
 	_build_visual()
+	_build_collision()
 	_build_grips()
 
 
@@ -54,7 +57,7 @@ func _ready() -> void:
 
 func _build_collision() -> void:
 	var shape := BoxShape3D.new()
-	shape.size = data.size
+	shape.size = _size
 	var col := CollisionShape3D.new()
 	col.shape = shape
 	add_child(col)
@@ -62,11 +65,16 @@ func _build_collision() -> void:
 
 func _build_visual() -> void:
 	if model_scene:
-		add_child(model_scene.instantiate())
+		var model := model_scene.instantiate() as Node3D
+		model.scale = Vector3.ONE * model_scale
+		add_child(model)
+		var bounds := _model_bounds(model)
+		model.position = -bounds.get_center()
+		_size = bounds.size
 	else:
 		var mesh := MeshInstance3D.new()
 		var box := BoxMesh.new()
-		box.size = data.size
+		box.size = _size
 		mesh.mesh = box
 		_material = StandardMaterial3D.new()
 		_base_color = _color_for_handling()
@@ -80,8 +88,20 @@ func _build_visual() -> void:
 	label.no_depth_test = true
 	label.pixel_size = 0.01
 	label.font_size = 28
-	label.position.y = data.size.y * 0.5 + 0.4
+	label.position.y = _size.y * 0.5 + 0.4
 	add_child(label)
+
+
+func _model_bounds(model: Node3D) -> AABB:
+	var inverse := global_transform.affine_inverse()
+	var bounds := AABB()
+	var first := true
+	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		var b := inverse * mi.global_transform * mi.get_aabb()
+		bounds = b if first else bounds.merge(b)
+		first = false
+	assert(not first, "Furniture model has no meshes")
+	return bounds
 
 
 func _color_for_handling() -> Color:
@@ -97,8 +117,8 @@ func _build_grips() -> void:
 	if data.grip_points.size() >= 2:
 		_grips = data.grip_points
 		return
-	var half := data.size * 0.5
-	if data.size.x >= data.size.z:
+	var half := _size * 0.5
+	if _size.x >= _size.z:
 		var x := half.x + GRIP_REACH
 		_grips = PackedVector3Array([Vector3(-x, 0, 0), Vector3(x, 0, 0)])
 	else:
@@ -208,7 +228,7 @@ func _target_for(player: Player, lift: float) -> Vector3:
 	var to_center := global_position - player.global_position
 	to_center.y = 0.0
 	var dir := to_center.normalized() if to_center.length() > 0.01 else player.get_facing()
-	var hold_height := maxf(data.size.y * 0.5 + 0.15, 0.7)
+	var hold_height := maxf(_size.y * 0.5 + 0.15, 0.7)
 	var target := player.global_position + dir * GRIP_REACH
 	target.y = player.global_position.y + lerpf(0.1, hold_height, lift)
 	return target

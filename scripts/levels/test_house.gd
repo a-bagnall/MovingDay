@@ -11,8 +11,15 @@ const WALL_THICKNESS := 0.3
 
 ## Optional: map to your imported models, e.g. {1: "res://assets/characters/models/raccoon.glb"}
 const PLAYER_MODELS := {}
-## Optional: furniture key -> model path, e.g. {"sofa": "res://assets/furniture/residential/sofa.glb"}
-const FURNITURE_MODELS := {}
+## Furniture key -> model path.
+const FURNITURE_MODELS := {
+	"sofa": "res://assets/furniture/residential/couch.gltf",
+	"fridge": "res://assets/furniture/restaurant/fridge_B.gltf",
+	"box": "res://assets/furniture/restaurant/crate.gltf",
+	"chair": "res://assets/furniture/residential/chair_A.gltf",
+}
+## KayKit models are oversized relative to the 1.3m player capsule.
+const FURNITURE_MODEL_SCALE := 0.6
 
 
 func _ready() -> void:
@@ -166,6 +173,7 @@ func _make(key: String, label: String, size: Vector3, mass: float, fragility: fl
 	f.data = d
 	if FURNITURE_MODELS.has(key):
 		f.model_scene = load(FURNITURE_MODELS[key])
+		f.model_scale = FURNITURE_MODEL_SCALE
 	f.position = pos
 	add_child(f)
 	return f

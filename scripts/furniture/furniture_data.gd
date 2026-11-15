@@ -7,7 +7,8 @@ enum Handling { STANDARD, HEAVY, FRAGILE, AWKWARD, OVERSIZED }
 
 @export var display_name: String = "Box"
 @export var mass: float = 10.0
-## Collision box size in metres (also drives the placeholder mesh).
+## Collision box size in metres. Only used for the placeholder mesh; furniture
+## with a model takes its size from the model bounds.
 @export var size: Vector3 = Vector3(0.6, 0.5, 0.6)
 ## 0 = indestructible, 1 = extremely fragile.
 @export_range(0.0, 1.0) var fragility: float = 0.3
