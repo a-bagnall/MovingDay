@@ -4,6 +4,7 @@ class_name Briefing
 ## the next client's letter, or the day summary when the day clock has expired.
 
 const TYPEWRITER_CHARS_PER_SECOND := 48.0
+const CONTRACT_FONT: Font = preload("res://assets/fonts/XTypewriter_Font_0_96/TrueType (.ttf)/XTypewriter-Regular.ttf")
 
 var _letter: Label
 var _typewriter_text := ""
@@ -14,6 +15,9 @@ var _continue_label: Label
 
 
 func _ready() -> void:
+	# Briefings are non-play time: never consume the day clock while reading
+	# the debrief, the next contract, or the end-of-day summary.
+	GameFlow.day_clock_running = false
 	for player_id in range(1, InputSetup.assigned_count() + 1):
 		var source := InputSetup.source_of(player_id)
 		_was_pressed[source] = InputSetup.is_interact_pressed(source)
@@ -71,6 +75,13 @@ func _build_ui() -> void:
 	column.add_child(prompt)
 
 
+func _contract_label(text: String, size: int = UIKit.FONT_BODY,
+		align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+	var label := UIKit.label(text, size, align)
+	label.add_theme_font_override("font", CONTRACT_FONT)
+	return label
+
+
 func _build_previous_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(1400, 1050)
@@ -78,19 +89,14 @@ func _build_previous_panel() -> Control:
 	column.add_theme_constant_override("separation", 14)
 	panel.add_child(column)
 
-	column.add_child(UIKit.label("PREVIOUS PROPERTY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+	column.add_child(_contract_label("PREVIOUS PROPERTY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
 	if GameFlow.previous_contract_result.is_empty():
-		column.add_child(UIKit.label("FIRST JOB OF THE DAY", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
-		column.add_child(UIKit.label("No previous property completed yet.\n\nYour team's results will appear here after each move.", UIKit.FONT_BODY))
+		column.add_child(_contract_label("FIRST JOB OF THE DAY", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
+		column.add_child(_contract_label("No previous property completed yet.\n\nYour team's results will appear here after each move.", UIKit.FONT_BODY))
 		return panel
 
 	var result := GameFlow.previous_contract_result
-	var receipt := Label.new()
-	receipt.add_theme_font_size_override("font_size", UIKit.FONT_BODY)
-	var receipt_font := SystemFont.new()
-	receipt_font.font_names = PackedStringArray(["monospace"])
-	receipt.add_theme_font_override("font", receipt_font)
-	receipt.text = "PROPERTY %02d\n%s\n--------------------------------\nItems delivered: %s\nCompletion: %d%%\nTime: %s\nBase pay: %s\nTime bonus: +%s\nDamage: -%s\n--------------------------------\nPAYMENT: %s" % [
+	var receipt := _contract_label("PROPERTY %02d\n%s\n--------------------------------\nItems delivered: %s\nCompletion: %d%%\nTime: %s\nBase pay: %s\nTime bonus: +%s\nDamage: -%s\n--------------------------------\nPAYMENT: %s" % [
 		GameFlow.day_contract_count,
 		str(result.get("client_name", "Previous client")),
 		str(result.get("items_delivered", "-")),
@@ -100,8 +106,7 @@ func _build_previous_panel() -> Control:
 		UIKit.money(float(result.get("time_bonus", 0.0))),
 		UIKit.money(float(result.get("damage", 0.0))),
 		UIKit.money(float(result.get("payment", 0.0))),
-	]
-	receipt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	])
 	receipt.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(receipt)
 	return panel
@@ -115,10 +120,10 @@ func _build_next_panel() -> Control:
 	panel.add_child(column)
 
 	if GameFlow.current_contract == null:
-		column.add_child(UIKit.label("END OF DAY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-		column.add_child(UIKit.label("No more contracts today. Your team has finished the shift.", UIKit.FONT_BODY))
-		column.add_child(UIKit.label("DAY TOTAL", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-		column.add_child(UIKit.label("Contracts completed: %d\nTotal base pay: %s\nTime bonuses: %s\nDamage costs: -%s\n\nTAKE-HOME: %s" % [
+		column.add_child(_contract_label("END OF DAY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+		column.add_child(_contract_label("No more contracts today. Your team has finished the shift.", UIKit.FONT_BODY))
+		column.add_child(_contract_label("DAY TOTAL", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+		column.add_child(_contract_label("Contracts completed: %d\nTotal base pay: %s\nTime bonuses: %s\nDamage costs: -%s\n\nTAKE-HOME: %s" % [
 			int(GameFlow.day_total.get("contracts_completed", 0)),
 			UIKit.money(float(GameFlow.day_total.get("base_pay", 0.0))),
 			UIKit.money(float(GameFlow.day_total.get("time_bonus", 0.0))),
@@ -128,12 +133,12 @@ func _build_next_panel() -> Control:
 		return panel
 
 	var contract := GameFlow.current_contract
-	column.add_child(UIKit.label("NEXT JOB", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-	column.add_child(UIKit.label("CONTRACT %02d  |  OFFER: %s" % [contract.contract_number, UIKit.money(contract.payout)], UIKit.FONT_SMALL))
-	column.add_child(UIKit.label("To: Moving team\nFrom: %s" % contract.client_name, UIKit.FONT_BODY))
+	column.add_child(_contract_label("NEXT JOB", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+	column.add_child(_contract_label("CONTRACT %02d  |  OFFER: %s" % [contract.contract_number, UIKit.money(contract.payout)], UIKit.FONT_SMALL))
+	column.add_child(_contract_label("To: Moving team\nFrom: %s" % contract.client_name, UIKit.FONT_BODY))
 	var divider := HSeparator.new()
 	column.add_child(divider)
-	_letter = UIKit.label("", UIKit.FONT_BODY)
+	_letter = _contract_label("")
 	_letter.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_letter.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(_letter)

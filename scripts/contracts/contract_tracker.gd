@@ -7,6 +7,7 @@ signal contract_finished(result: Dictionary)
 
 const PAR_TIME := 120.0        ## Seconds under which a time bonus is earned.
 const TIME_BONUS_RATE := 2.0   ## Dollars per second under par.
+const FIRST_DAY_DEBUG_ITEM := "Box"
 
 var zone: DeliveryZone
 var required: Array[Furniture] = []
@@ -23,8 +24,27 @@ var _day_value: Label
 
 func setup(delivery_zone: DeliveryZone, items: Array[Furniture], job_contract: Contract = null) -> void:
 	zone = delivery_zone
-	required = items
 	contract = job_contract if job_contract != null else GameFlow.current_contract
+
+	# Keep day one deliberately simple while the progression loop is being tested.
+	# Retain the lightweight, single-player Box and remove the other spawned items.
+	if SaveManager.run != null and SaveManager.run.day == 1:
+		var debug_item: Furniture
+		for item in items:
+			if item.data != null and item.data.display_name == FIRST_DAY_DEBUG_ITEM:
+				debug_item = item
+				break
+		if debug_item == null and not items.is_empty():
+			debug_item = items[0]
+
+		for item in items:
+			if item != debug_item:
+				item.queue_free()
+		items.clear()
+		if debug_item != null:
+			items.append(debug_item)
+
+	required = items
 	_build_ui()
 
 
