@@ -229,7 +229,7 @@ func _build_rig(skeleton: Skeleton3D) -> void:
 	_skeleton = skeleton
 	for i in skeleton.get_bone_count():
 		var bone_name := skeleton.get_bone_name(i)
-		for key in ["LLeg1", "RLeg1", "LArm1", "RArm1", "Head", "Chest", "Hips"]:
+		for key in ["LLeg1", "RLeg1", "LLeg2", "RLeg2", "LArm1", "RArm1", "LArm2", "RArm2", "Head", "Chest"]:
 			if bone_name.ends_with(key):
 				var parent := skeleton.get_bone_parent(i)
 				var rest := skeleton.get_bone_global_rest(i)
@@ -274,21 +274,34 @@ func _animate_character(delta: float) -> void:
 		_anim.speed_scale = clampf(speed / max_speed, 0.6, 1.3) if moving else 1.0
 		return
 
+	var style: Dictionary = CharacterCatalog.ENTRIES[CharacterCatalog.clamp_index(character)]["style"]
+	var kind: String = CharacterCatalog.character_name(character)
+	var s_rate: float = style.get("rate", 1.0)
+	var s_bob: float = style.get("bob", 1.0)
+	var s_roll: float = style.get("roll", 1.0)
+	var s_leg: float = style.get("leg", 1.0)
+	var s_arm: float = style.get("arm", 1.0)
+	var s_twist: float = style.get("twist", 1.0)
+	var s_nod: float = style.get("nod", 1.0)
+	var in_sync: bool = style.get("sync", false)
+
 	var amount := clampf(speed / max_speed, 0.0, 1.0) if moving else 0.0
 	_walk_blend = lerpf(_walk_blend, amount, 1.0 - exp(-10.0 * delta))
 	var carry_target := 1.0 if held_furniture != null else 0.0
 	_carry_blend = lerpf(_carry_blend, carry_target, 1.0 - exp(-9.0 * delta))
-	var step_rate := lerpf(7.0, 13.0, _walk_blend)
+	var step_rate := lerpf(7.0, 13.0, _walk_blend) * s_rate
 	_anim_time += delta * (step_rate if _walk_blend > 0.05 else 2.0)   # one cycle = two steps
 	_idle_time += delta
 
 	var w := _walk_blend
-	var hop := absf(sin(_anim_time))                       # 0 at footfall, 1 at the top
-	var bob := hop * 0.11 * w
-	# Stretch tall on the way up, squash flat as the foot lands.
+	var swing := sin(_anim_time)
+	var hop := absf(swing)                                 # 0 at footfall, 1 at the top
+	var bob := hop * 0.1 * s_bob * w
+	# Stretch tall on the way up, squash flat as the foot lands (a little overshoot
+	# on landing: the squash is deepest just after the footfall).
 	var squash := 1.0 + (hop - 0.45) * 0.16 * w
 	squash += sin(_idle_time * 2.2) * 0.02 * (1.0 - w)     # breathing
-	var roll := sin(_anim_time) * 0.16 * w                 # waddle
+	var roll := swing * 0.15 * s_roll * w                  # waddle
 
 	# Lean into speeding up and braking, and bank into turns, from how the velocity changed.
 	var vel := Vector3(velocity.x, 0.0, velocity.z)
@@ -301,20 +314,44 @@ func _animate_character(delta: float) -> void:
 	_anim_lean = lerpf(_anim_lean, lean_target, 1.0 - exp(-9.0 * delta))
 	_anim_bank = lerpf(_anim_bank, bank_target, 1.0 - exp(-9.0 * delta))
 
+	# --- per-character idle charm ---
+	var idle := 1.0 - w
+	var head_pitch := 0.0
+	var head_tilt := 0.0
+	var head_look := sin(_idle_time * 0.9) * 0.22 * idle
+	var arm_pat := 0.0     # extra raise on the left arm
+	match kind:
+		"Bear":   # big sleepy breaths and slow drowsy nods
+			squash += sin(_idle_time * 1.6) * 0.025 * idle
+			head_pitch += (sin(_idle_time * 0.7) * 0.08 + 0.05) * idle
+			head_look *= 0.5
+		"Bunny":  # little nose twitches in quick bursts, ears-up alertness
+			var burst := pow(maxf(0.0, sin(_idle_time * 1.9)), 6.0)
+			head_pitch += sin(_idle_time * 42.0) * 0.06 * burst * idle
+			bob += absf(sin(_idle_time * 42.0)) * 0.008 * burst * idle
+		"Cat":    # slow, smug sway, head cocked, now and then a soft paw pat
+			roll += sin(_idle_time * 1.1) * 0.04 * idle
+			head_tilt += (0.12 + sin(_idle_time * 0.8) * 0.08) * idle
+			arm_pat = maxf(0.0, sin(_idle_time * 0.9)) * absf(sin(_idle_time * 7.0)) * 0.5 * idle
+		"Dog":    # eager: the back end wiggles like a tail, head tilts curiously
+			roll += sin(_idle_time * 9.0) * 0.06 * (0.5 + 0.5 * sin(_idle_time * 0.8)) * idle
+			head_tilt += sin(_idle_time * 0.6) * 0.18 * idle
+			head_pitch += maxf(0.0, sin(_idle_time * 0.6)) * 0.08 * idle
+
 	# A happy fidget now and then when standing around: a quick wiggle and a hop.
 	_fidget_cooldown -= delta
 	if _fidget_cooldown <= 0.0:
 		_fidget_cooldown = randf_range(5.0, 9.0)
 		if w < 0.05 and held_furniture == null:
 			_fidget_left = 0.7
-	var fidget := 0.0
 	if _fidget_left > 0.0:
 		_fidget_left = maxf(_fidget_left - delta, 0.0)
 		var t := 1.0 - _fidget_left / 0.7
-		fidget = sin(t * PI)                      # eases in and out
-		roll += sin(t * 28.0) * 0.14 * fidget
-		bob += absf(sin(t * 14.0)) * 0.07 * fidget
-		squash += (absf(sin(t * 14.0)) - 0.5) * 0.08 * fidget
+		var ease_io := sin(t * PI)
+		roll += sin(t * 28.0) * 0.14 * ease_io
+		bob += absf(sin(t * 14.0)) * 0.07 * ease_io
+		squash += (absf(sin(t * 14.0)) - 0.5) * 0.08 * ease_io
+
 	_char_root.position.y = bob
 	_char_root.rotation = Vector3(-_anim_lean, _char_yaw, roll + _anim_bank)
 	var wide := 1.0 / sqrt(squash)
@@ -322,27 +359,39 @@ func _animate_character(delta: float) -> void:
 
 	if _skeleton == null:
 		return
-	var swing := sin(_anim_time)
-	# Legs: quick little steps, opposite each other.
-	_pose_bone("LLeg1", Basis(Vector3.RIGHT, swing * 0.9 * w))
-	_pose_bone("RLeg1", Basis(Vector3.RIGHT, -swing * 0.9 * w))
-	# Arms: hang down from the plushie T-pose, swing against the legs, and rise to
-	# hold the furniture when carrying.
+	# Legs: quick little steps, opposite each other (together for a hopping bunny), with
+	# the knee tucking up as each leg swings forward so the feet lift off the ground.
+	var leg_l := swing * 0.85 * s_leg * w
+	var leg_r := (swing if in_sync else -swing) * 0.85 * s_leg * w
+	_pose_bone("LLeg1", Basis(Vector3.RIGHT, leg_l))
+	_pose_bone("RLeg1", Basis(Vector3.RIGHT, leg_r))
+	var cos_phase := cos(_anim_time)
+	var knee_l := maxf(0.0, -cos_phase) * 0.8 * s_leg * w
+	var knee_r := knee_l if in_sync else maxf(0.0, cos_phase) * 0.8 * s_leg * w
+	_pose_bone("LLeg2", Basis(Vector3.RIGHT, knee_l))
+	_pose_bone("RLeg2", Basis(Vector3.RIGHT, knee_r))
+	# Arms: hang down from the plushie T-pose, swing against the legs, bend at the
+	# elbow, and rise to hold the furniture when carrying.
 	for key in ["LArm1", "RArm1"]:
 		if not _rig.has(key):
 			continue
+		var is_left := key == "LArm1"
 		var side: float = _rig[key]["side"]
-		var phase := -swing if key == "LArm1" else swing
-		var idle_sway := sin(_idle_time * 1.7 + (0.0 if key == "LArm1" else 1.4)) * 0.07 * (1.0 - w)
+		var phase := swing if (in_sync or not is_left) else -swing
+		var idle_sway := sin(_idle_time * 1.7 + (0.0 if is_left else 1.4)) * 0.07 * idle
 		var drop := Basis(Vector3.BACK, -side * lerpf(1.15, 0.45, _carry_blend))
-		var raise := Basis(Vector3.RIGHT, phase * 0.8 * w + idle_sway - 1.35 * _carry_blend)
+		var raise := Basis(Vector3.RIGHT, phase * 0.8 * s_arm * w + idle_sway - 1.35 * _carry_blend
+			- (arm_pat if is_left else 0.0))
 		_pose_bone(key, raise * drop)
-	# Head: keeps level against the waddle, with a curious idle tilt and glance.
-	var look := sin(_idle_time * 0.9) * 0.22 * (1.0 - w)
-	var tilt := sin(_idle_time * 1.3 + 1.0) * 0.12 * (1.0 - w) - roll * 0.6
-	_pose_bone("Head", Basis(Vector3.UP, look) * Basis(Vector3.BACK, tilt) * Basis(Vector3.RIGHT, -bob * 1.5 + 0.04 * sin(_anim_time * 2.0) * w))
-	# Chest: a little counter-twist as the shoulders swing, and a breath.
-	_pose_bone("Chest", Basis(Vector3.UP, -swing * 0.12 * w) * Basis(Vector3.RIGHT, sin(_idle_time * 2.2) * 0.02 * (1.0 - w)))
+		var elbow := (0.25 + 0.25 * maxf(0.0, -phase)) * w + 0.5 * _carry_blend
+		_pose_bone("LArm2" if is_left else "RArm2", Basis(Vector3.RIGHT, -elbow))
+	# Head: keeps level against the waddle, bobs along a beat behind the body.
+	var nod := sin(_anim_time * 2.0 - 0.9) * 0.07 * s_nod * w
+	_pose_bone("Head", Basis(Vector3.UP, head_look) * Basis(Vector3.BACK, head_tilt - roll * 0.6 + sin(_idle_time * 1.3 + 1.0) * 0.1 * idle)
+		* Basis(Vector3.RIGHT, head_pitch - bob * 1.5 + nod))
+	# Chest: counter-twist as the hips swing, and a breath.
+	_pose_bone("Chest", Basis(Vector3.UP, -swing * 0.12 * s_twist * w)
+		* Basis(Vector3.RIGHT, sin(_idle_time * 2.2) * 0.02 * idle))
 
 
 ## Combined bounds of every mesh under `model`, in the model's own (unscaled) space.
