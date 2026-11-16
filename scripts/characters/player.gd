@@ -26,6 +26,11 @@ var _anim_walk: StringName = &""
 var _anim_current: StringName = &""
 var _anim_time := 0.0
 var _anim_lean := 0.0
+var _skeleton: Skeleton3D
+var _rig := {}
+var _walk_blend := 0.0
+var _carry_blend := 0.0
+var _idle_time := 0.0
 
 @export_group("Movement")
 @export var max_speed: float = 5.0
@@ -186,6 +191,11 @@ func _attach_character(index: int) -> bool:
 ## Models that ship with animations (the robot) use them; the rest are animated
 ## procedurally in _animate_character.
 func _setup_animations(model: Node3D) -> void:
+	_rig.clear()
+	_skeleton = null
+	var skeletons := model.find_children("*", "Skeleton3D", true, false)
+	if not skeletons.is_empty():
+		_build_rig(skeletons[0] as Skeleton3D)
 	_anim = null
 	_anim_idle = &""
 	_anim_walk = &""
@@ -209,11 +219,44 @@ func _setup_animations(model: Node3D) -> void:
 	_anim_current = _anim_idle
 
 
+## Finds the limbs of a plushie skeleton by name ("BearLLeg1", "CatHead", ...). Missing
+## bones are simply skipped, so any rig works as far as it is named this way.
+func _build_rig(skeleton: Skeleton3D) -> void:
+	_skeleton = skeleton
+	for i in skeleton.get_bone_count():
+		var bone_name := skeleton.get_bone_name(i)
+		for key in ["LLeg1", "RLeg1", "LArm1", "RArm1", "Head", "Chest", "Hips"]:
+			if bone_name.ends_with(key):
+				var parent := skeleton.get_bone_parent(i)
+				var rest := skeleton.get_bone_global_rest(i)
+				var parent_basis := Basis.IDENTITY if parent < 0 else skeleton.get_bone_global_rest(parent).basis.orthonormalized()
+				_rig[key] = {
+					"bone": i,
+					"rest_rot": skeleton.get_bone_rest(i).basis.get_rotation_quaternion(),
+					"parent_basis": parent_basis,
+					"global_basis": rest.basis.orthonormalized(),
+					"side": signf(rest.origin.x) if signf(rest.origin.x) != 0.0 else 1.0,
+				}
+
+
+## Rotates a bone by `delta` (a rotation in the model's own axes: X is side to side,
+## Y up, Z front to back) from its rest pose. Axes of the bone itself don't matter.
+func _pose_bone(key: String, delta: Basis) -> void:
+	if not _rig.has(key):
+		return
+	var info: Dictionary = _rig[key]
+	var local: Basis = (info["parent_basis"] as Basis).inverse() * delta * (info["global_basis"] as Basis)
+	_skeleton.set_bone_pose_rotation(info["bone"], local.get_rotation_quaternion())
+
+
 func _process(delta: float) -> void:
 	_animate_character(delta)
 
 
-## Idle breathing, a waddling walk, and a lean into the direction of travel.
+## Cute, bouncy motion: a hop on every step (stretch going up, squash on landing), arms
+## and legs swinging, a waddle and a lean; breathing, head tilts and arm sways when idle;
+## arms out in front when carrying. Plushies are posed bone by bone; the robot plays
+## its own clips.
 func _animate_character(delta: float) -> void:
 	if _char_root == null or not is_instance_valid(_char_root):
 		return
@@ -226,21 +269,52 @@ func _animate_character(delta: float) -> void:
 			_anim_current = want
 		_anim.speed_scale = clampf(speed / max_speed, 0.6, 1.3) if moving else 1.0
 		return
-	_anim_time += delta * (lerpf(6.0, 13.0, clampf(speed / max_speed, 0.0, 1.0)) if moving else 2.2)
-	var bob := 0.0
-	var roll := 0.0
-	var squash := 1.0
-	if moving:
-		var amount := clampf(speed / max_speed, 0.3, 1.0)
-		bob = absf(sin(_anim_time)) * 0.09 * amount        # hop on each step
-		roll = sin(_anim_time) * 0.14 * amount             # waddle side to side
-	else:
-		squash = 1.0 + sin(_anim_time) * 0.018             # breathing
-	var lean := lerpf(_anim_lean, 0.12 if moving else 0.0, 1.0 - exp(-8.0 * delta))
+
+	var amount := clampf(speed / max_speed, 0.0, 1.0) if moving else 0.0
+	_walk_blend = lerpf(_walk_blend, amount, 1.0 - exp(-10.0 * delta))
+	var carry_target := 1.0 if held_furniture != null else 0.0
+	_carry_blend = lerpf(_carry_blend, carry_target, 1.0 - exp(-9.0 * delta))
+	var step_rate := lerpf(7.0, 13.0, _walk_blend)
+	_anim_time += delta * (step_rate if _walk_blend > 0.05 else 2.0)   # one cycle = two steps
+	_idle_time += delta
+
+	var w := _walk_blend
+	var hop := absf(sin(_anim_time))                       # 0 at footfall, 1 at the top
+	var bob := hop * 0.11 * w
+	# Stretch tall on the way up, squash flat as the foot lands.
+	var squash := 1.0 + (hop - 0.45) * 0.16 * w
+	squash += sin(_idle_time * 2.2) * 0.02 * (1.0 - w)     # breathing
+	var roll := sin(_anim_time) * 0.16 * w                 # waddle
+	var lean := lerpf(_anim_lean, 0.14 if moving else 0.0, 1.0 - exp(-8.0 * delta))
 	_anim_lean = lean
 	_char_root.position.y = bob
 	_char_root.rotation = Vector3(-lean, _char_yaw, roll)
-	_char_root.scale = Vector3(1.0 / sqrt(squash), squash, 1.0 / sqrt(squash))
+	var wide := 1.0 / sqrt(squash)
+	_char_root.scale = Vector3(wide, squash, wide)
+
+	if _skeleton == null:
+		return
+	var swing := sin(_anim_time)
+	# Legs: quick little steps, opposite each other.
+	_pose_bone("LLeg1", Basis(Vector3.RIGHT, swing * 0.9 * w))
+	_pose_bone("RLeg1", Basis(Vector3.RIGHT, -swing * 0.9 * w))
+	# Arms: hang down from the plushie T-pose, swing against the legs, and rise to
+	# hold the furniture when carrying.
+	for key in ["LArm1", "RArm1"]:
+		if not _rig.has(key):
+			continue
+		var side: float = _rig[key]["side"]
+		var phase := -swing if key == "LArm1" else swing
+		var idle_sway := sin(_idle_time * 1.7 + (0.0 if key == "LArm1" else 1.4)) * 0.07 * (1.0 - w)
+		var drop := Basis(Vector3.BACK, -side * lerpf(1.15, 0.45, _carry_blend))
+		var raise := Basis(Vector3.RIGHT, phase * 0.8 * w + idle_sway - 1.35 * _carry_blend)
+		_pose_bone(key, raise * drop)
+	# Head: keeps level against the waddle, with a curious idle tilt and glance.
+	var look := sin(_idle_time * 0.9) * 0.22 * (1.0 - w)
+	var tilt := sin(_idle_time * 1.3 + 1.0) * 0.12 * (1.0 - w) - roll * 0.6
+	_pose_bone("Head", Basis(Vector3.UP, look) * Basis(Vector3.BACK, tilt) * Basis(Vector3.RIGHT, -bob * 1.5 + 0.04 * sin(_anim_time * 2.0) * w))
+	# Chest: a little counter-twist as the shoulders swing, and a breath.
+	_pose_bone("Chest", Basis(Vector3.UP, -swing * 0.12 * w) * Basis(Vector3.RIGHT, sin(_idle_time * 2.2) * 0.02 * (1.0 - w)))
 
 
 ## Combined bounds of every mesh under `model`, in the model's own (unscaled) space.
