@@ -687,6 +687,11 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 func _apply_damage(excess: float) -> void:
 	# Sturdy things still take a little; fragile things take a lot.
 	var raw := excess * maxf(data.fragility, 0.1) * data.value * DAMAGE_SCALE * RunModifiers.damage_multiplier()
+	_deal_damage(raw)
+
+
+## Takes `raw` damage (capped at what the item has left) with the usual feedback.
+func _deal_damage(raw: float) -> void:
 	var amount := minf(raw, data.value - total_damage)
 	if amount <= 0.01:
 		return
@@ -697,6 +702,30 @@ func _apply_damage(excess: float) -> void:
 	_shake = 1.0
 	_show_damage_popup(amount)
 	damaged.emit(amount, total_damage)
+
+
+## Host (or offline): a player shoved this item along `direction`. It moves, and fragile
+## things tend to break while sturdy ones mostly shrug it off.
+func shoved(direction: Vector3) -> void:
+	if is_puppet or is_held() or is_delivered or data == null:
+		return
+	var flat := Vector3(direction.x, 0.0, direction.z)
+	if flat.length() < 0.01:
+		return
+	apply_central_impulse(flat.normalized() * Balance.SHOVE_FURNITURE_IMPULSE)
+	if not damage_enabled:
+		return
+	var chance := 1.0 if data.tier() == FurnitureData.Tier.FRAGILE else \
+		clampf(data.fragility * Balance.SHOVE_BREAK_CHANCE_PER_FRAGILITY, Balance.SHOVE_MIN_BREAK_CHANCE, 1.0)
+	if randf() < chance:
+		var fraction := lerpf(Balance.SHOVE_DAMAGE_MIN_FRACTION, Balance.SHOVE_DAMAGE_MAX_FRACTION,
+			clampf(data.fragility, 0.0, 1.0))
+		_deal_damage(data.value * fragility_damage_scale() * fraction)
+
+
+## Modifiers such as Glass Cargo make everything break more easily, shoves included.
+func fragility_damage_scale() -> float:
+	return RunModifiers.damage_multiplier()
 
 
 func _update_flash(delta: float) -> void:

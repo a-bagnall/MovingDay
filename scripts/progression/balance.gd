@@ -82,6 +82,25 @@ const LIFT_EXTRA_HEIGHT := 0.65
 const LIFT_GRIP_DRAIN := 0.12
 
 
+# --- Shove (the Action button with empty hands) -----------------------------------------
+
+## Seconds before the same player can shove again, and how far in front a shove reaches (m).
+const SHOVE_COOLDOWN := 1.0
+const SHOVE_REACH := 1.5
+## A shoved player is knocked this fast (m/s) and stumbles briefly.
+const SHOVE_PLAYER_SPEED := 5.0
+## A shoved item gets this impulse (kg m/s), so a light box flies and a sofa barely budges.
+const SHOVE_FURNITURE_IMPULSE := 28.0
+## Chance a shove damages an item: fragility times this, never below the minimum. Anything
+## in the Fragile tier is always damaged, and a sturdy item only rarely.
+const SHOVE_BREAK_CHANCE_PER_FRAGILITY := 1.5
+const SHOVE_MIN_BREAK_CHANCE := 0.1
+## When it does, the damage is this fraction of the item's value, between sturdy (0 fragility)
+## and fully fragile (1.0).
+const SHOVE_DAMAGE_MIN_FRACTION := 0.05
+const SHOVE_DAMAGE_MAX_FRACTION := 0.7
+
+
 # --- Sticky pairs ---------------------------------------------------------------------
 
 const STICKY_FIRST_DAY := 3

@@ -42,6 +42,7 @@ func _ready() -> void:
 	if NetworkManager.is_host():
 		NetworkManager.interact_requested.connect(_on_interact_requested)
 		NetworkManager.pushes_received.connect(_on_pushes_received)
+		NetworkManager.furniture_shove_requested.connect(_on_furniture_shove_requested)
 	else:
 		NetworkManager.job_state_received.connect(_on_job_state_received)
 		NetworkManager.stumble_received.connect(_on_stumble_received)
@@ -55,6 +56,7 @@ func _exit_tree() -> void:
 	_disconnect(NetworkManager.player_states_received, _on_player_states_received)
 	_disconnect(NetworkManager.interact_requested, _on_interact_requested)
 	_disconnect(NetworkManager.pushes_received, _on_pushes_received)
+	_disconnect(NetworkManager.furniture_shove_requested, _on_furniture_shove_requested)
 	_disconnect(NetworkManager.job_state_received, _on_job_state_received)
 	_disconnect(NetworkManager.stumble_received, _on_stumble_received)
 
@@ -192,6 +194,12 @@ func _on_pushes_received(_peer_id: int, pushes: Array) -> void:
 			continue
 		var impulse: Vector3 = entry[1]
 		item.apply_central_impulse(impulse.limit_length(item.mass * MAX_PUSH_PER_KG))
+
+
+func _on_furniture_shove_requested(_peer_id: int, furniture_id: int, direction: Vector3) -> void:
+	var item: Furniture = _items.get(furniture_id)
+	if item != null and is_instance_valid(item):
+		item.shoved(direction)
 
 
 # --- client: furniture ----------------------------------------------------

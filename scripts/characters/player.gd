@@ -41,6 +41,10 @@ var color_index := -1
 var _color_ring: MeshInstance3D
 var _ping_prev := false
 var _ping_cooldown := 0.0
+var _action_prev := false
+var _shove_cooldown := 0.0
+var _shove_blend := 0.0
+var _shove_left := 0.0
 const PING_COOLDOWN := 0.8
 ## How far ahead a ping lands, and how close an item must be to that spot to be pinged itself.
 const PING_REACH := 2.2
@@ -115,6 +119,7 @@ func _ready() -> void:
 	_build_visual()
 	_build_color_ring()
 	NetworkManager.ping_received.connect(_on_ping_received)
+	NetworkManager.shove_received.connect(_on_shove_received)
 
 
 func _build_collision() -> void:
@@ -189,6 +194,76 @@ func set_color_index(index: int) -> void:
 	color_index = index
 	if _color_ring:
 		_apply_color()
+
+
+## Action with empty hands: shove whoever (a teammate) or whatever (furniture) is in front.
+func _handle_shove(delta: float) -> void:
+	_shove_cooldown = maxf(_shove_cooldown - delta, 0.0)
+	_shove_left = maxf(_shove_left - delta, 0.0)
+	var pressed := input.action
+	if pressed and not _action_prev and _shove_cooldown <= 0.0 and held_furniture == null \
+			and not movement_locked:
+		_shove()
+	_action_prev = pressed
+
+
+func _shove() -> void:
+	var facing := get_facing()
+	var target_player: Player = null
+	var best := Balance.SHOVE_REACH
+	for other: Player in get_tree().get_nodes_in_group("players"):
+		if other == self:
+			continue
+		var to := other.global_position - global_position
+		to.y = 0.0
+		if to.length() < best and to.normalized().dot(facing) > 0.5 and absf(other.global_position.y - global_position.y) < 1.2:
+			best = to.length()
+			target_player = other
+
+	var target_item: Furniture = null
+	if target_player == null:
+		for item: Furniture in get_tree().get_nodes_in_group("furniture"):
+			if item.data == null or item.is_held() or item.is_delivered:
+				continue
+			var to := item.global_position - global_position
+			to.y = 0.0
+			var reach := Balance.SHOVE_REACH + maxf(item.data.size.x, item.data.size.z) * 0.5
+			if to.length() < reach and to.length() > 0.01 and to.normalized().dot(facing) > 0.4 \
+					and absf(item.global_position.y - global_position.y) < 1.6:
+				target_item = item
+				reach = to.length()
+
+	# Nothing in reach still swings: a whiff is allowed (and funny), it just costs the cooldown.
+	_shove_cooldown = Balance.SHOVE_COOLDOWN
+	_shove_left = 0.3
+	pop()
+	if target_player != null:
+		var kick := facing * Balance.SHOVE_PLAYER_SPEED
+		if target_player.is_local:
+			target_player.apply_shove(kick)
+		else:
+			NetworkManager.send_shove_player(target_player.player_id, kick)
+	elif target_item != null:
+		var push := target_item.global_position - global_position
+		if target_item.is_puppet:
+			NetworkManager.send_shove_furniture(target_item.net_id, push)
+		else:
+			target_item.shoved(push)
+
+
+## Knocked by someone's shove: a burst of speed away, and a stumble.
+func apply_shove(kick: Vector3) -> void:
+	if not is_local:
+		return
+	velocity.x += kick.x
+	velocity.z += kick.z
+	_stumble_left = stumble_time
+	pop()
+
+
+func _on_shove_received(shoved_player_id: int, kick: Vector3) -> void:
+	if is_local and shoved_player_id == player_id:
+		apply_shove(kick)
 
 
 ## Drops a coloured marker ahead of this player, or on the item they are facing.
@@ -371,6 +446,7 @@ func _animate_character(delta: float) -> void:
 	var amount := clampf(speed / max_speed, 0.0, 1.0) if moving else 0.0
 	_walk_blend = lerpf(_walk_blend, amount, 1.0 - exp(-10.0 * delta))
 	var carry_target := 1.0 if held_furniture != null else 0.0
+	_shove_blend = lerpf(_shove_blend, 1.0 if _shove_left > 0.0 else 0.0, 1.0 - exp(-20.0 * delta))
 	_lift_blend = lerpf(_lift_blend, 1.0 if (held_furniture != null and input.lift) else 0.0, 1.0 - exp(-12.0 * delta))
 	_carry_blend = lerpf(_carry_blend, carry_target, 1.0 - exp(-9.0 * delta))
 	var step_rate := lerpf(7.0, 13.0, _walk_blend) * s_rate
@@ -453,7 +529,7 @@ func _animate_character(delta: float) -> void:
 		var phase := swing if (in_sync or not is_left) else -swing
 		var idle_sway := sin(_idle_time * 1.7 + (0.0 if is_left else 1.4)) * 0.07 * idle
 		var drop := Basis(Vector3.BACK, -side * lerpf(1.15, 0.45, _carry_blend))
-		var raise := Basis(Vector3.RIGHT, phase * 0.4 * minf(s_arm, 1.0) * w + idle_sway - 0.95 * _carry_blend - 0.45 * _lift_blend
+		var raise := Basis(Vector3.RIGHT, phase * 0.4 * minf(s_arm, 1.0) * w + idle_sway - 0.95 * _carry_blend - 0.45 * _lift_blend - 1.3 * _shove_blend
 			- (arm_pat if is_left else 0.0))
 		_pose_bone(key, raise * drop)
 		var elbow := (0.25 + 0.25 * maxf(0.0, -phase)) * w + 0.5 * _carry_blend
@@ -514,6 +590,7 @@ func _physics_process(delta: float) -> void:
 		_follow_remote(delta)
 		return
 	_handle_ping(delta)
+	_handle_shove(delta)
 	var move := Vector2.ZERO if movement_locked else input.move
 	var input_dir := Vector3(move.x, 0.0, move.y).rotated(Vector3.UP, CAMERA_YAW)
 
