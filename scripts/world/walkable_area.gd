@@ -91,7 +91,8 @@ func _on_player_states_received(peer_id: int, states: Array) -> void:
 		if player == null or player.is_local or not allowed.has(player.player_id):
 			continue
 		var character: int = CharacterCatalog.clamp_index(state[6]) if (state as Array).size() > 6 else -1
-		player.apply_net_state(state[1], state[3], state[4], state[5], state[2], character)
+		var buttons: int = int(state[7]) if (state as Array).size() > 7 else 0
+		player.apply_net_state(state[1], state[3], state[4], state[5], state[2], character, buttons)
 
 
 func _find_player(player_id: int) -> Player:

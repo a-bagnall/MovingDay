@@ -34,13 +34,14 @@ var _skeleton: Skeleton3D
 var _rig := {}
 var _walk_blend := 0.0
 var _carry_blend := 0.0
+var _lift_blend := 0.0
 var _idle_time := 0.0
 
 @export_group("Movement")
 @export var max_speed: float = 5.0
-@export var acceleration: float = Balance.PLAYER_ACCELERATION
-@export var braking: float = Balance.PLAYER_BRAKING
-@export var reversal_penalty: float = Balance.REVERSAL_PENALTY  ## <1 makes direction reversals sluggish
+@export var acceleration: float = 14.0
+@export var braking: float = 9.0
+@export var reversal_penalty: float = 0.6  ## <1 makes direction reversals sluggish
 @export var turn_speed: float = 9.0
 @export var gravity: float = 24.0
 @export var stumble_time: float = 0.55
@@ -288,6 +289,7 @@ func _animate_character(delta: float) -> void:
 	var amount := clampf(speed / max_speed, 0.0, 1.0) if moving else 0.0
 	_walk_blend = lerpf(_walk_blend, amount, 1.0 - exp(-10.0 * delta))
 	var carry_target := 1.0 if held_furniture != null else 0.0
+	_lift_blend = lerpf(_lift_blend, 1.0 if (held_furniture != null and input.lift) else 0.0, 1.0 - exp(-12.0 * delta))
 	_carry_blend = lerpf(_carry_blend, carry_target, 1.0 - exp(-9.0 * delta))
 	var step_rate := lerpf(7.0, 13.0, _walk_blend) * s_rate
 	_anim_time += delta * (step_rate if _walk_blend > 0.05 else 2.0)   # one cycle = two steps
@@ -369,7 +371,7 @@ func _animate_character(delta: float) -> void:
 		var phase := swing if (in_sync or not is_left) else -swing
 		var idle_sway := sin(_idle_time * 1.7 + (0.0 if is_left else 1.4)) * 0.07 * idle
 		var drop := Basis(Vector3.BACK, -side * lerpf(1.15, 0.45, _carry_blend))
-		var raise := Basis(Vector3.RIGHT, phase * 0.4 * minf(s_arm, 1.0) * w + idle_sway - 0.95 * _carry_blend
+		var raise := Basis(Vector3.RIGHT, phase * 0.4 * minf(s_arm, 1.0) * w + idle_sway - 0.95 * _carry_blend - 0.45 * _lift_blend
 			- (arm_pat if is_left else 0.0))
 		_pose_bone(key, raise * drop)
 		var elbow := (0.25 + 0.25 * maxf(0.0, -phase)) * w + 0.5 * _carry_blend
@@ -419,6 +421,9 @@ func _poll_input() -> void:
 		return
 	input.move = InputSetup.get_move(_source)
 	input.interact = InputSetup.is_interact_pressed(_source)
+	input.lift = InputSetup.is_button_pressed(_source, "lift")
+	input.action = InputSetup.is_button_pressed(_source, "action")
+	input.ping = InputSetup.is_button_pressed(_source, "ping")
 
 
 func _physics_process(delta: float) -> void:
@@ -437,7 +442,7 @@ func _physics_process(delta: float) -> void:
 	var control := 0.25 if _stumble_left > 0.0 else 1.0
 	var target := input_dir * max_speed * shop_speed_multiplier * speed_multiplier * control
 	var rate := acceleration * shop_acceleration_multiplier if input_dir.length() > 0.01 else braking
-	rate *= lerpf(Balance.CARRY_RESPONSE_FLOOR, 1.0, speed_multiplier) * RunModifiers.control_multiplier()
+	rate *= lerpf(0.5, 1.0, speed_multiplier) * RunModifiers.control_multiplier()
 	if horizontal.dot(target) < 0.0:
 		rate *= reversal_penalty
 	horizontal = horizontal.move_toward(target, rate * delta)
@@ -467,17 +472,18 @@ func _physics_process(delta: float) -> void:
 
 
 ## State to stream to other machines:
-## [id, position, velocity, facing, move, interact, character].
+## [id, position, velocity, facing, move, interact, character, buttons] (buttons: see
+## PlayerInput.buttons_bits). Older senders may omit the last two.
 func net_state() -> Array:
 	return [player_id, global_position, velocity, _visual.rotation.y if _visual else 0.0,
-		input.move, input.interact, character]
+		input.move, input.interact, character, input.buttons_bits()]
 
 
 ## Remote players: remember where the owning machine says this player is, and feed
 ## its input so interact presses reach the area's zones. `velocity_` is kept so the
 ## furniture this player carries (simulated on the host) can match its speed.
 func apply_net_state(position_: Vector3, yaw: float, move: Vector2, interact: bool,
-		velocity_ := Vector3.ZERO, character_ := -1) -> void:
+		velocity_ := Vector3.ZERO, character_ := -1, buttons := 0) -> void:
 	if character_ >= 0:
 		CharacterCatalog.choose(player_id, character_)
 		set_character(character_)
@@ -485,6 +491,7 @@ func apply_net_state(position_: Vector3, yaw: float, move: Vector2, interact: bo
 	_net_yaw = yaw
 	input.move = move
 	input.interact = interact
+	input.set_buttons_bits(buttons)
 	velocity = velocity_
 	_has_net_state = true
 

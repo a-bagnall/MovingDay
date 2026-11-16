@@ -22,7 +22,7 @@ var net_id := -1
 var net_speed_mult := 1.0
 
 const GRIP_REACH := 0.65      ## Distance from the furniture end to where a player stands.
-const MAX_CARRY_ACCEL := Balance.MAX_CARRY_ACCEL
+const MAX_CARRY_ACCEL := 45.0
 const MAX_STRAIN := 2.2       ## Grip further than this from the holder = auto-drop (e.g. a player pinned by a wall). Must exceed Player.reach (1.8) or far grabs drop instantly.
 ## Players are locked to the grip point they grabbed: each frame they are pulled
 ## back toward it, so the item's rotation swings them around and corners are hard.
@@ -45,8 +45,8 @@ const TEAM_STRAIN_FREE := 0.9      ## Grip-to-holder stretch (m) a team can abso
 const TEAM_SLIP_PER_STRAIN := 0.4  ## Grip lost per second per metre above that.
 const DAMAGE_SCALE := 0.5          ## Overall damage harshness (was 0.25).
 const FURNITURE_HIT_THRESHOLD := 0.6  ## Furniture-vs-furniture knocks count at this fraction of the threshold.
-const HOLD_GRAVITY_SCALE := Balance.HOLD_GRAVITY_SCALE   ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
-const HELD_ANGULAR_DAMP := Balance.HELD_ANGULAR_DAMP     ## Rotational drag while held; higher = less wobble and swing.
+const HOLD_GRAVITY_SCALE := 0.6   ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
+const HELD_ANGULAR_DAMP := 4.0     ## Rotational drag while held; higher = less wobble and swing.
 const DISSOLVE_TIME := 0.8
 ## Feedback ("pizzazz")
 const WOBBLE_START := 0.65         ## Below this grip strength the item starts to wobble.
@@ -457,6 +457,8 @@ func _target_for(player: Player, lift: float) -> Vector3:
 	var hold_height := maxf(_size.y * 0.5 + 0.15, 0.7)
 	var target := player.global_position
 	target.y = player.global_position.y + lerpf(0.1, hold_height, lift)
+	if player.input.lift:
+		target.y += Balance.LIFT_EXTRA_HEIGHT * lift   # held over the head: clears rails and counters
 	return target
 
 
@@ -489,11 +491,16 @@ func _update_grip(delta: float, strain: float) -> bool:
 	if _grip_grace > 0.0:
 		_grip_grace -= delta   # settling in after the grab: no slipping yet
 		return false
+	var lift_drain := 0.0
+	for p: Player in _holders.values():
+		if p.input.lift:
+			lift_drain = Balance.LIFT_GRIP_DRAIN
 	if _holders.size() >= _players_needed():
 		# A full team is steady, but wild swinging or players pulling apart
 		# still shakes the grip loose.
 		var shake := maxf(angular_velocity.length() - TEAM_SWING_FREE, 0.0) * TEAM_SLIP_PER_SWING \
 			+ maxf(strain - TEAM_STRAIN_FREE, 0.0) * TEAM_SLIP_PER_STRAIN
+		shake += lift_drain
 		if shake > 0.0:
 			_grip_strength = maxf(_grip_strength - shake * RunModifiers.grip_drain_multiplier() * delta, 0.0)
 		else:
@@ -502,7 +509,7 @@ func _update_grip(delta: float, strain: float) -> bool:
 	var speed := 0.0
 	for p: Player in _holders.values():
 		speed = maxf(speed, Vector2(p.velocity.x, p.velocity.z).length())
-	var drain := SLIP_BASE + SLIP_PER_SPEED * speed + SLIP_PER_SWING * angular_velocity.length()
+	var drain := SLIP_BASE + SLIP_PER_SPEED * speed + SLIP_PER_SWING * angular_velocity.length() + lift_drain
 	_grip_strength = maxf(_grip_strength - drain * RunModifiers.grip_drain_multiplier() * delta, 0.0)
 	return _grip_strength <= 0.0
 

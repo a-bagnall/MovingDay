@@ -10,11 +10,13 @@ Open the project in Godot 4.7 and press F5.
 
 The game starts in the main menu. Hold the interact button there to claim a player slot (first to join is P1), then stand on a run slot pad and press interact. An empty slot starts a new run; a saved one opens its details (day, wallet, contracts completed, earnings, damage, last saved) with Continue, Delete and Back. Move with the arrow keys or d-pad and press Enter or gamepad A; Delete asks for confirmation and frees the slot. A run is a series of days, each a job. Every 3 days the players visit the hub (walk onto the truck pad together to start the next job). The game saves only at the start and end of a day. You can play a whole run solo: a lone player can carry two-player items, but only at a slow walk, and nothing heavy is ever stuck to another item.
 
-| Source | Move | Interact (grab / drop) |
-| --- | --- | --- |
-| Keyboard | WASD | E |
-| Keyboard | Arrow keys | Enter |
-| Gamepad | Left stick | A |
+| Source | Move | Interact (grab / drop) | Lift (hold) | Action | Ping |
+| --- | --- | --- | --- | --- | --- |
+| Keyboard 1 | WASD | E | Q | R | F |
+| Keyboard 2 | Arrow keys | Enter | Right Shift | Right Ctrl | / |
+| Gamepad | Left stick | A | Left trigger | X | Y |
+
+Hold Lift while carrying to raise the item over rails and counters (it costs grip, so it is a move, not a pose). Action and Ping are wired up but do nothing yet; they arrive in later steps.
 
 Characters: a new player picks one on joining (left/right to choose, interact to confirm), and anyone can change it later on the pink Wardrobe pad. Everyone sees everyone's pick, online too. Each character is scaled to a set height in `scripts/characters/character_catalog.gd`; if one looks backwards in game, change its `yaw` there.
 

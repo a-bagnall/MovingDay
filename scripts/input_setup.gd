@@ -9,18 +9,26 @@ const KB_ARROWS := -2
 const MAX_PLAYERS := 4
 const JOY_DEADZONE := 0.2
 
-const ACTIONS := ["up", "down", "left", "right", "interact"]
+## Buttons beyond movement and interact. Lift is held; Action and Ping are pressed.
+const BUTTONS := ["lift", "action", "ping"]
+## How far a gamepad trigger must be pulled to count as pressed.
+const TRIGGER_PRESSED := 0.5
+
+const ACTIONS := ["up", "down", "left", "right", "interact", "lift", "action", "ping"]
 
 const KEYS := {
 	KB_WASD: {
 		"up": KEY_W, "down": KEY_S, "left": KEY_A, "right": KEY_D,
-		"interact": KEY_E,
+		"interact": KEY_E, "lift": KEY_Q, "action": KEY_R, "ping": KEY_F,
 	},
 	KB_ARROWS: {
 		"up": KEY_UP, "down": KEY_DOWN, "left": KEY_LEFT, "right": KEY_RIGHT,
-		"interact": KEY_ENTER,
+		"interact": KEY_ENTER, "lift": KEY_SHIFT, "action": KEY_CTRL, "ping": KEY_SLASH,
 	},
 }
+
+## Keys that exist on both sides of the keyboard: the arrow scheme only wants the right one.
+const RIGHT_SIDE_ONLY := [KEY_SHIFT, KEY_CTRL]
 
 var _players: Array[int] = []   # source of each local player, in join order
 ## Player id of each local player (same order as _players). Offline that is 1, 2, 3...
@@ -39,6 +47,8 @@ func _ready() -> void:
 			InputMap.add_action(action_name, JOY_DEADZONE)
 			var key_event := InputEventKey.new()
 			key_event.physical_keycode = KEYS[source][action]
+			if source == KB_ARROWS and RIGHT_SIDE_ONLY.has(KEYS[source][action]):
+				key_event.location = KEY_LOCATION_RIGHT
 			InputMap.action_add_event(action_name, key_event)
 
 
@@ -51,9 +61,9 @@ func available_sources() -> Array[int]:
 func describe(source: int) -> String:
 	match source:
 		KB_WASD:
-			return "Keyboard (WASD + E)"
+			return "Keyboard (WASD + E, Q lift, R action, F ping)"
 		KB_ARROWS:
-			return "Keyboard (Arrows + Enter)"
+			return "Keyboard (Arrows + Enter, R-Shift lift, R-Ctrl action, / ping)"
 		_:
 			return "%s (A)" % Input.get_joy_name(source)
 
@@ -130,6 +140,23 @@ func is_interact_pressed(source: int) -> bool:
 			return false
 		return Input.is_action_pressed(_action(source, "interact"))
 	return Input.is_joy_button_pressed(source, JOY_BUTTON_A)
+
+
+## Whether `button` ("lift", "action" or "ping") is held for `source`. Gamepad: left trigger
+## is lift, X is action, Y is ping.
+func is_button_pressed(source: int, button: String) -> bool:
+	if source < 0:
+		if ui_captured:
+			return false
+		return Input.is_action_pressed(_action(source, button))
+	match button:
+		"lift":
+			return Input.get_joy_axis(source, JOY_AXIS_TRIGGER_LEFT) > TRIGGER_PRESSED
+		"action":
+			return Input.is_joy_button_pressed(source, JOY_BUTTON_X)
+		"ping":
+			return Input.is_joy_button_pressed(source, JOY_BUTTON_Y)
+	return false
 
 
 func _action(source: int, action: String) -> String:
