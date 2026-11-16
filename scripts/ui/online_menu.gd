@@ -57,20 +57,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _build_frame() -> void:
-	var root := UIKit.setup(self)
-
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE   # the room behind stays clickable-through
-	root.add_child(center)
-
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1300, 0)
-	center.add_child(panel)
-
-	_content = VBoxContainer.new()
-	_content.add_theme_constant_override("separation", 22)
-	panel.add_child(_content)
+	_content = UIKit.modal(self, 1300, false)   # the room stays visible and clickable-through
 
 
 ## Rebuilds the panel for the current network state.

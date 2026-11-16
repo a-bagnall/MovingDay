@@ -19,6 +19,9 @@ const MAX_HEIGHT_GAP := 1.0
 const GLUE_DELAY := 1.3
 const GUM_COLOR := Color(1.0, 0.45, 0.7)
 
+## Pairs picked for this job (0 until setup runs), for the HUD.
+var pairs_made := 0
+
 
 ## How many stuck pairs a job on `day` has: 1 from day 3, one more every 5 days, and
 ## one more with the Gum Everywhere modifier.
@@ -27,6 +30,10 @@ static func pair_count(day: int) -> int:
 	if day >= FIRST_STICKY_DAY:
 		base = 1 + (day - FIRST_STICKY_DAY) / PAIR_EVERY_DAYS
 	return mini(base + RunModifiers.extra_sticky_pairs(), MAX_PAIRS)
+
+
+func _ready() -> void:
+	add_to_group("sticky_links")
 
 
 func setup(items: Array[Furniture], day: int, slot: int) -> void:
@@ -48,6 +55,7 @@ func setup(items: Array[Furniture], day: int, slot: int) -> void:
 		pairs.append([first, mate])
 	for pair: Array in pairs:
 		_bring_together(pair[0], pair[1])
+	pairs_made = pairs.size()
 	if pairs.is_empty():
 		return
 

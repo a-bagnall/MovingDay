@@ -59,6 +59,13 @@ func _build_ui() -> void:
 		GameFlow.day_contract_count,
 	]
 	column.add_child(UIKit.label(subtitle, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+	var run_notes := PackedStringArray()
+	if not SaveManager.run.modifiers.is_empty():
+		run_notes.append("MODIFIERS: %s" % RunModifiers.names(SaveManager.run.modifiers).to_upper())
+	if GameFlow.current_contract != null and StickyLinks.pair_count(SaveManager.run.day) > 0:
+		run_notes.append("HEADS UP: SOME ITEMS ARE STUCK TOGETHER")
+	if not run_notes.is_empty():
+		column.add_child(UIKit.label("  |  ".join(run_notes), UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
 
 	var panels := HBoxContainer.new()
 	panels.add_theme_constant_override("separation", 20)

@@ -49,6 +49,29 @@ static func setup(layer: CanvasLayer) -> Control:
 	return root
 
 
+## A centred card of `width` over a dimmed screen: the shape every pop-up uses. Returns
+## the card's content column to add to. `dim` false leaves the room undimmed and
+## clickable-through (the online panel).
+static func modal(layer: CanvasLayer, width: float, dim := true) -> VBoxContainer:
+	var root := setup(layer)
+	if dim:
+		var shade := ColorRect.new()
+		shade.color = Color(0.0, 0.0, 0.0, 0.45)
+		shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+		root.add_child(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(center)
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(width, 0)
+	center.add_child(panel)
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 22)
+	panel.add_child(content)
+	return content
+
+
 static func label(text: String, size: int = FONT_BODY,
 		align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT,
 		variation: StringName = &"") -> Label:
@@ -122,13 +145,41 @@ static func theme() -> Theme:
 	t.set_stylebox("normal", "Button", _box("Buttons/Square/SquareButton2_wood.png", button_margins, button_pad))
 	t.set_stylebox("hover", "Button", _box("Buttons/Square/SquareButton2_white.png", button_margins, button_pad))
 	t.set_stylebox("pressed", "Button", _box("Buttons/Square/SquareButton2_red.png", button_margins, button_pad))
-	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
+	# Keyboard and gamepad players move with focus, so the focused button must be obvious:
+	# it looks like the hovered one (white), and stays that way while the mouse is elsewhere.
+	t.set_stylebox("focus", "Button", _box("Buttons/Square/SquareButton2_white.png", button_margins, button_pad))
+	t.set_stylebox("hover_pressed", "Button", _box("Buttons/Square/SquareButton2_red.png", button_margins, button_pad))
+	t.set_stylebox("disabled", "Button", _box("Buttons/Square/SquareButton2_wood.png", button_margins, button_pad))
+	t.set_color("font_focus_color", "Button", BROWN_DARK)
+	t.set_color("font_disabled_color", "Button", Color(CREAM, 0.5))
+	t.set_color("font_hover_pressed_color", "Button", CREAM)
 	t.set_color("font_color", "Button", CREAM)
 	t.set_color("font_hover_color", "Button", BROWN_DARK)
 	t.set_color("font_pressed_color", "Button", CREAM)
 	t.set_color("font_outline_color", "Button", BROWN_DARK)
 	t.set_constant("outline_size", "Button", 12)
 	t.set_font_size("font_size", "Button", FONT_BODY)
+
+	# Text fields (the host address box): a cream note with a brown edge.
+	var field := StyleBoxFlat.new()
+	field.bg_color = CREAM
+	field.border_color = BROWN
+	field.set_border_width_all(6)
+	field.set_corner_radius_all(14)
+	field.content_margin_left = 28
+	field.content_margin_right = 28
+	field.content_margin_top = 16
+	field.content_margin_bottom = 16
+	t.set_stylebox("normal", "LineEdit", field)
+	var field_focus := field.duplicate() as StyleBoxFlat
+	field_focus.border_color = BROWN_DARK
+	field_focus.set_border_width_all(10)
+	t.set_stylebox("focus", "LineEdit", field_focus)
+	t.set_color("font_color", "LineEdit", BROWN_DARK)
+	t.set_color("font_placeholder_color", "LineEdit", Color(NOTE_TEXT, 0.6))
+	t.set_color("caret_color", "LineEdit", BROWN_DARK)
+	t.set_color("selection_color", "LineEdit", Color(GOLD, 0.8))
+	t.set_font_size("font_size", "LineEdit", FONT_BODY)
 
 	_theme = t
 	return t

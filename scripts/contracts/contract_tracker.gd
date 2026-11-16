@@ -20,6 +20,8 @@ var _delivered_value: Label
 var _damage_value: Label
 var _time_value: Label
 var _day_value: Label
+var _hint_label: Label
+var _hint_extra := ""
 
 
 func setup(delivery_zone: DeliveryZone, items: Array[Furniture], job_contract: Contract = null) -> void:
@@ -79,9 +81,25 @@ func _build_ui() -> void:
 	var hint := PanelContainer.new()
 	hint.theme_type_variation = &"NotePanel"
 	hint.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	hint.add_child(UIKit.label("Grab / drop: %s" % UIKit.INTERACT_KEYS, UIKit.FONT_SMALL,
-		HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel"))
+	_hint_label = UIKit.label("", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel")
+	hint.add_child(_hint_label)
+	_refresh_hint()
 	column.add_child(hint)
+
+
+## The bottom note: the grab prompt, then anything unusual about this job (the run's
+## modifiers and how many pairs of items are stuck together).
+func _refresh_hint() -> void:
+	var text := "Grab / drop: %s" % UIKit.INTERACT_KEYS
+	var run := SaveManager.run
+	if run != null and not run.modifiers.is_empty():
+		text += "\nModifiers: %s" % RunModifiers.names(run.modifiers)
+	var sticky := get_tree().get_first_node_in_group("sticky_links") as StickyLinks if is_inside_tree() else null
+	if sticky != null and sticky.pairs_made > 0:
+		text += "\nStuck together: %d pair%s (look for the pink gum)" % [sticky.pairs_made, "" if sticky.pairs_made == 1 else "s"]
+	if text != _hint_extra:
+		_hint_extra = text
+		_hint_label.text = text
 
 
 func _add_chip(bar: HBoxContainer, caption: String) -> Label:
@@ -101,6 +119,7 @@ func _process(delta: float) -> void:
 	if finished or zone == null:
 		return
 	elapsed += delta
+	_refresh_hint()
 
 	var delivered := zone.delivered_items.size()
 	var damage := total_damage()

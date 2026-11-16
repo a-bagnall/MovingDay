@@ -17,25 +17,7 @@ var _content: VBoxContainer
 
 func _ready() -> void:
 	layer = 20
-	var root := UIKit.setup(self)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.0, 0.0, 0.45)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(dim)
-
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(center)
-
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1300, 0)
-	center.add_child(panel)
-
-	_content = VBoxContainer.new()
-	_content.add_theme_constant_override("separation", 22)
-	panel.add_child(_content)
+	_content = UIKit.modal(self, 1300)
 	visible = false
 
 
