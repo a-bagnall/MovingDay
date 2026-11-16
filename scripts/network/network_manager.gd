@@ -44,6 +44,8 @@ signal ping_received(player_id: int, position: Vector3)
 signal shove_received(player_id: int, kick: Vector3)
 ## Host: a client shoved furniture `furniture_id` along `direction`.
 signal furniture_shove_requested(peer_id: int, furniture_id: int, direction: Vector3)
+## Host: a client's player `player_id` threw furniture `furniture_id` with `velocity`.
+signal throw_requested(peer_id: int, player_id: int, furniture_id: int, velocity: Vector3)
 
 const DEFAULT_PORT := 7777
 
@@ -217,6 +219,12 @@ func send_shove_player(target_id: int, kick: Vector3) -> void:
 func send_shove_furniture(furniture_id: int, direction: Vector3) -> void:
 	if mode == Mode.CLIENT and _is_connected():
 		_request_shove_furniture.rpc_id(1, furniture_id, direction)
+
+
+## Client: asks the host to let go of `furniture_id` and throw it.
+func send_throw(player_id: int, furniture_id: int, velocity: Vector3) -> void:
+	if mode == Mode.CLIENT and _is_connected():
+		_request_throw.rpc_id(1, player_id, furniture_id, velocity)
 
 
 func _route_shove(target_id: int, kick: Vector3) -> void:
@@ -496,6 +504,12 @@ func _deliver_shove(target_id: int, kick: Vector3) -> void:
 func _request_shove_furniture(furniture_id: int, direction: Vector3) -> void:
 	if mode == Mode.HOST:
 		furniture_shove_requested.emit(multiplayer.get_remote_sender_id(), furniture_id, direction)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_throw(player_id: int, furniture_id: int, velocity: Vector3) -> void:
+	if mode == Mode.HOST:
+		throw_requested.emit(multiplayer.get_remote_sender_id(), player_id, furniture_id, velocity)
 
 
 # --- connection events (client side) ----------------------------------------

@@ -101,6 +101,20 @@ const SHOVE_DAMAGE_MIN_FRACTION := 0.05
 const SHOVE_DAMAGE_MAX_FRACTION := 0.7
 
 
+# --- Throw (hold Action while carrying a light item, release to throw) -------------------
+
+## Only items this light, and needing one player, can be thrown.
+const THROW_MAX_MASS := 10.0
+## Seconds of holding Action for a full-strength throw; a quick tap is a short toss.
+const THROW_CHARGE_TIME := 0.8
+const THROW_MIN_SPEED := 3.5
+const THROW_MAX_SPEED := 10.0
+## Upward speed as a fraction of the throw speed, for an arc.
+const THROW_ARC := 0.45
+## Seconds before the same player can start another throw.
+const THROW_COOLDOWN := 0.6
+
+
 # --- Sticky pairs ---------------------------------------------------------------------
 
 const STICKY_FIRST_DAY := 3

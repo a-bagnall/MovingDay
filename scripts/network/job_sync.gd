@@ -43,6 +43,7 @@ func _ready() -> void:
 		NetworkManager.interact_requested.connect(_on_interact_requested)
 		NetworkManager.pushes_received.connect(_on_pushes_received)
 		NetworkManager.furniture_shove_requested.connect(_on_furniture_shove_requested)
+		NetworkManager.throw_requested.connect(_on_throw_requested)
 	else:
 		NetworkManager.job_state_received.connect(_on_job_state_received)
 		NetworkManager.stumble_received.connect(_on_stumble_received)
@@ -57,6 +58,7 @@ func _exit_tree() -> void:
 	_disconnect(NetworkManager.interact_requested, _on_interact_requested)
 	_disconnect(NetworkManager.pushes_received, _on_pushes_received)
 	_disconnect(NetworkManager.furniture_shove_requested, _on_furniture_shove_requested)
+	_disconnect(NetworkManager.throw_requested, _on_throw_requested)
 	_disconnect(NetworkManager.job_state_received, _on_job_state_received)
 	_disconnect(NetworkManager.stumble_received, _on_stumble_received)
 
@@ -200,6 +202,15 @@ func _on_furniture_shove_requested(_peer_id: int, furniture_id: int, direction: 
 	var item: Furniture = _items.get(furniture_id)
 	if item != null and is_instance_valid(item):
 		item.shoved(direction)
+
+
+func _on_throw_requested(peer_id: int, player_id: int, furniture_id: int, velocity: Vector3) -> void:
+	if not (NetworkManager.roster().get(peer_id, []) as Array).has(player_id):
+		return   # not one of that machine's players
+	var player := _find_player(player_id)
+	var item: Furniture = _items.get(furniture_id)
+	if player != null and not player.is_local and item != null and is_instance_valid(item):
+		item.throw_by(player, velocity)
 
 
 # --- client: furniture ----------------------------------------------------

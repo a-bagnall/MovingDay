@@ -704,6 +704,24 @@ func _deal_damage(raw: float) -> void:
 	damaged.emit(amount, total_damage)
 
 
+## True for an item a single player can throw: light, and needing one person. (Checked from
+## the item's data alone, so a client can ask too.)
+func is_throwable() -> bool:
+	return data != null and data.players_required <= 1 and mass <= Balance.THROW_MAX_MASS
+
+
+## Host (or offline): `player` lets go of this item and sends it flying at `velocity`.
+## Damage on landing comes from the normal impact rules.
+func throw_by(player: Player, velocity: Vector3) -> void:
+	if is_puppet or not is_throwable() or not _holders.values().has(player):
+		return
+	release(player)
+	sleeping = false
+	linear_velocity = velocity.limit_length(Balance.THROW_MAX_SPEED * 1.15)
+	angular_velocity = Vector3(randf_range(-4.0, 4.0), randf_range(-3.0, 3.0), randf_range(-4.0, 4.0))
+	_pop(1.2)
+
+
 ## Host (or offline): a player shoved this item along `direction`. It moves, and fragile
 ## things tend to break while sturdy ones mostly shrug it off.
 func shoved(direction: Vector3) -> void:

@@ -45,6 +45,9 @@ var _action_prev := false
 var _shove_cooldown := 0.0
 var _shove_blend := 0.0
 var _shove_left := 0.0
+var _throw_charge := 0.0   # 0..1 while holding Action with a light item
+var _throw_cooldown := 0.0
+var _throwing := false
 const PING_COOLDOWN := 0.8
 ## How far ahead a ping lands, and how close an item must be to that spot to be pinged itself.
 const PING_REACH := 2.2
@@ -200,11 +203,47 @@ func set_color_index(index: int) -> void:
 func _handle_shove(delta: float) -> void:
 	_shove_cooldown = maxf(_shove_cooldown - delta, 0.0)
 	_shove_left = maxf(_shove_left - delta, 0.0)
+	_throw_cooldown = maxf(_throw_cooldown - delta, 0.0)
 	var pressed := input.action
+	if held_furniture != null:
+		_handle_throw(delta, pressed)
+		_action_prev = pressed
+		return
+	_throwing = false
+	_throw_charge = 0.0
 	if pressed and not _action_prev and _shove_cooldown <= 0.0 and held_furniture == null \
 			and not movement_locked:
 		_shove()
 	_action_prev = pressed
+
+
+## Carrying a light item: holding Action winds up, releasing throws. Heavy items ignore it.
+func _handle_throw(delta: float, pressed: bool) -> void:
+	if not held_furniture.is_throwable() or movement_locked:
+		_throwing = false
+		_throw_charge = 0.0
+		return
+	if pressed and (_throwing or (not _action_prev and _throw_cooldown <= 0.0)):
+		_throwing = true
+		_throw_charge = minf(_throw_charge + delta / Balance.THROW_CHARGE_TIME, 1.0)
+	elif _throwing:
+		_throw(_throw_charge)
+		_throwing = false
+		_throw_charge = 0.0
+
+
+func _throw(charge: float) -> void:
+	var item := held_furniture
+	var speed := lerpf(Balance.THROW_MIN_SPEED, Balance.THROW_MAX_SPEED, charge)
+	var velocity_out := get_facing() * speed + Vector3.UP * speed * Balance.THROW_ARC
+	_throw_cooldown = Balance.THROW_COOLDOWN
+	pop()
+	if GameFlow.is_authority():
+		item.throw_by(self, velocity_out)
+	else:   # the host owns the furniture: let go at once, and it sends the item flying
+		NetworkManager.send_throw(player_id, item.net_id, velocity_out)
+		item.release(self)
+		net_ignore_holds_until = Time.get_ticks_msec() + 400
 
 
 func _shove() -> void:
@@ -227,11 +266,10 @@ func _shove() -> void:
 				continue
 			var to := item.global_position - global_position
 			to.y = 0.0
-			var reach := Balance.SHOVE_REACH + maxf(item.data.size.x, item.data.size.z) * 0.5
-			if to.length() < reach and to.length() > 0.01 and to.normalized().dot(facing) > 0.4 \
+			var item_reach := Balance.SHOVE_REACH + maxf(item.data.size.x, item.data.size.z) * 0.5
+			if to.length() < item_reach and to.length() > 0.01 and to.normalized().dot(facing) > 0.4 \
 					and absf(item.global_position.y - global_position.y) < 1.6:
 				target_item = item
-				reach = to.length()
 
 	# Nothing in reach still swings: a whiff is allowed (and funny), it just costs the cooldown.
 	_shove_cooldown = Balance.SHOVE_COOLDOWN
@@ -447,7 +485,7 @@ func _animate_character(delta: float) -> void:
 	_walk_blend = lerpf(_walk_blend, amount, 1.0 - exp(-10.0 * delta))
 	var carry_target := 1.0 if held_furniture != null else 0.0
 	_shove_blend = lerpf(_shove_blend, 1.0 if _shove_left > 0.0 else 0.0, 1.0 - exp(-20.0 * delta))
-	_lift_blend = lerpf(_lift_blend, 1.0 if (held_furniture != null and input.lift) else 0.0, 1.0 - exp(-12.0 * delta))
+	_lift_blend = lerpf(_lift_blend, 1.0 if (held_furniture != null and (input.lift or _throwing)) else 0.0, 1.0 - exp(-12.0 * delta))
 	_carry_blend = lerpf(_carry_blend, carry_target, 1.0 - exp(-9.0 * delta))
 	var step_rate := lerpf(7.0, 13.0, _walk_blend) * s_rate
 	_anim_time += delta * (step_rate if _walk_blend > 0.05 else 2.0)   # one cycle = two steps
@@ -469,7 +507,7 @@ func _animate_character(delta: float) -> void:
 	_prev_velocity = vel
 	var facing := Vector3.FORWARD.rotated(Vector3.UP, _visual.rotation.y)
 	var side_dir := facing.cross(Vector3.UP)
-	var lean_target := clampf(accel.dot(facing) * 0.006, -0.10, 0.10) + (0.04 if moving else 0.0)
+	var lean_target := clampf(accel.dot(facing) * 0.006, -0.10, 0.10) + (0.04 if moving else 0.0) - 0.2 * _throw_charge   # lean back to wind up
 	var bank_target := clampf(accel.dot(side_dir) * 0.006, -0.09, 0.09)
 	_anim_lean = lerpf(_anim_lean, lean_target, 1.0 - exp(-9.0 * delta))
 	_anim_bank = lerpf(_anim_bank, bank_target, 1.0 - exp(-9.0 * delta))
