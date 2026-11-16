@@ -18,6 +18,14 @@ class_name Player
 var character := -1
 ## True while the player is picking a character: they stand still.
 var movement_locked := false
+var _char_root: Node3D
+var _char_yaw := 0.0
+var _anim: AnimationPlayer
+var _anim_idle: StringName = &""
+var _anim_walk: StringName = &""
+var _anim_current: StringName = &""
+var _anim_time := 0.0
+var _anim_lean := 0.0
 
 @export_group("Movement")
 @export var max_speed: float = 5.0
@@ -160,44 +168,107 @@ func _attach_character(index: int) -> bool:
 	root.add_child(model)
 	_visual.add_child(root)
 
-	var box := _mesh_bounds(model, Transform3D.IDENTITY)
+	var box := _mesh_bounds(model)
 	if box.size.y > 0.0001:
 		var fit: float = float(entry["height"]) / box.size.y
 		model.scale *= fit
 		# Feet on the floor, centred under the player (bounds were in unscaled model space).
 		model.position = Vector3(-(box.position.x + box.size.x * 0.5) * fit, -box.position.y * fit,
 			-(box.position.z + box.size.z * 0.5) * fit)
-	root.rotation.y = float(entry["yaw"])
-	# Robot-style models ship with animations: play an idle if there is one.
-	for node in model.find_children("*", "AnimationPlayer", true, false):
-		var anim := node as AnimationPlayer
-		for anim_name in anim.get_animation_list():
-			if "idle" in String(anim_name).to_lower():
-				anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR
-				anim.play(anim_name)
-				break
+	print("[Character] %s: measured size %s -> fitted to %.2f m" % [entry["name"], box.size, entry["height"]])
+	_char_root = root
+	_char_yaw = float(entry["yaw"])
+	root.rotation.y = _char_yaw
+	_setup_animations(model)
 	return true
 
 
-## Combined bounds of every mesh under `node`, in the space of the node whose
-## transform is `to_root` (identity for the model root itself).
-func _mesh_bounds(node: Node3D, to_root: Transform3D) -> AABB:
-	var result := AABB()
-	var have := false
-	var stack: Array = [[node, to_root]]
-	while not stack.is_empty():
-		var item: Array = stack.pop_back()
-		var n: Node3D = item[0]
-		var xf: Transform3D = item[1]
-		if n != node:
-			xf = xf * n.transform
-		if n is MeshInstance3D and (n as MeshInstance3D).mesh:
-			var b := xf * (n as MeshInstance3D).mesh.get_aabb()
-			result = b if not have else result.merge(b)
-			have = true
+## Models that ship with animations (the robot) use them; the rest are animated
+## procedurally in _animate_character.
+func _setup_animations(model: Node3D) -> void:
+	_anim = null
+	_anim_idle = &""
+	_anim_walk = &""
+	_anim_current = &""
+	var found := model.find_children("*", "AnimationPlayer", true, false)
+	if found.is_empty():
+		return
+	var player := found[0] as AnimationPlayer
+	for anim_name in player.get_animation_list():
+		var lower := String(anim_name).to_lower()
+		if _anim_idle == &"" and "idle" in lower:
+			_anim_idle = anim_name
+		elif _anim_walk == &"" and "walk" in lower:
+			_anim_walk = anim_name
+	if _anim_idle == &"" or _anim_walk == &"":
+		return
+	for anim_name in [_anim_idle, _anim_walk]:
+		player.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR
+	_anim = player
+	player.play(_anim_idle)
+	_anim_current = _anim_idle
+
+
+func _process(delta: float) -> void:
+	_animate_character(delta)
+
+
+## Idle breathing, a waddling walk, and a lean into the direction of travel.
+func _animate_character(delta: float) -> void:
+	if _char_root == null or not is_instance_valid(_char_root):
+		return
+	var speed := Vector2(velocity.x, velocity.z).length()
+	var moving := speed > 0.4
+	if _anim:
+		var want := _anim_walk if moving else _anim_idle
+		if want != _anim_current:
+			_anim.play(want, 0.2)
+			_anim_current = want
+		_anim.speed_scale = clampf(speed / max_speed, 0.6, 1.3) if moving else 1.0
+		return
+	_anim_time += delta * (lerpf(6.0, 13.0, clampf(speed / max_speed, 0.0, 1.0)) if moving else 2.2)
+	var bob := 0.0
+	var roll := 0.0
+	var squash := 1.0
+	if moving:
+		var amount := clampf(speed / max_speed, 0.3, 1.0)
+		bob = absf(sin(_anim_time)) * 0.09 * amount        # hop on each step
+		roll = sin(_anim_time) * 0.14 * amount             # waddle side to side
+	else:
+		squash = 1.0 + sin(_anim_time) * 0.018             # breathing
+	var lean := lerpf(_anim_lean, 0.12 if moving else 0.0, 1.0 - exp(-8.0 * delta))
+	_anim_lean = lean
+	_char_root.position.y = bob
+	_char_root.rotation = Vector3(-lean, _char_yaw, roll)
+	_char_root.scale = Vector3(1.0 / sqrt(squash), squash, 1.0 / sqrt(squash))
+
+
+## Combined bounds of every mesh under `model`, in the model's own (unscaled) space.
+## A skinned mesh is drawn in its skeleton's space and ignores the mesh node's own
+## transform, so it is measured through the skeleton's transform instead.
+func _mesh_bounds(model: Node3D) -> AABB:
+	var to_model := {model: Transform3D.IDENTITY}   # node -> transform relative to the model root
+	var queue: Array[Node3D] = [model]
+	while not queue.is_empty():
+		var n: Node3D = queue.pop_front()
 		for child in n.get_children():
 			if child is Node3D:
-				stack.append([child, xf])
+				to_model[child] = to_model[n] * (child as Node3D).transform
+				queue.append(child)
+	var result := AABB()
+	var have := false
+	for node: Node3D in to_model:
+		var mi := node as MeshInstance3D
+		if mi == null or mi.mesh == null:
+			continue
+		var space: Transform3D = to_model[mi]
+		if mi.skin != null:
+			var skeleton := mi.get_node_or_null(mi.skeleton) as Skeleton3D
+			if skeleton != null and to_model.has(skeleton):
+				space = to_model[skeleton]
+		var b: AABB = space * mi.mesh.get_aabb()
+		result = b if not have else result.merge(b)
+		have = true
 	return result
 
 
