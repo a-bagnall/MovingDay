@@ -38,9 +38,9 @@ var _idle_time := 0.0
 
 @export_group("Movement")
 @export var max_speed: float = 5.0
-@export var acceleration: float = 14.0
-@export var braking: float = 9.0
-@export var reversal_penalty: float = 0.6  ## <1 makes direction reversals sluggish
+@export var acceleration: float = Balance.PLAYER_ACCELERATION
+@export var braking: float = Balance.PLAYER_BRAKING
+@export var reversal_penalty: float = Balance.REVERSAL_PENALTY  ## <1 makes direction reversals sluggish
 @export var turn_speed: float = 9.0
 @export var gravity: float = 24.0
 @export var stumble_time: float = 0.55
@@ -437,7 +437,7 @@ func _physics_process(delta: float) -> void:
 	var control := 0.25 if _stumble_left > 0.0 else 1.0
 	var target := input_dir * max_speed * shop_speed_multiplier * speed_multiplier * control
 	var rate := acceleration * shop_acceleration_multiplier if input_dir.length() > 0.01 else braking
-	rate *= lerpf(0.5, 1.0, speed_multiplier) * RunModifiers.control_multiplier()
+	rate *= lerpf(Balance.CARRY_RESPONSE_FLOOR, 1.0, speed_multiplier) * RunModifiers.control_multiplier()
 	if horizontal.dot(target) < 0.0:
 		rate *= reversal_penalty
 	horizontal = horizontal.move_toward(target, rate * delta)
