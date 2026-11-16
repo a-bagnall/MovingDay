@@ -14,6 +14,9 @@ var equipped_outfit := ""
 ## Preferred character (CharacterCatalog index) for the 1st, 2nd... player on this
 ## computer, so a pick is remembered next launch. Optional in the file.
 var characters: Array[int] = []
+## Lifetime run record, for comparing playtest runs. Optional in the file.
+var best_run_day := 0      # most days completed in any run that ended
+var runs_ended := 0
 
 
 func to_dict() -> Dictionary:
@@ -23,6 +26,8 @@ func to_dict() -> Dictionary:
 		"cosmetics": cosmetics.duplicate(),
 		"equipped_outfit": equipped_outfit,
 		"characters": characters.duplicate(),
+		"best_run_day": best_run_day,
+		"runs_ended": runs_ended,
 	}
 
 
@@ -48,6 +53,8 @@ static func from_dict(data: Dictionary) -> ProfileState:
 		for entry in saved_characters:
 			if typeof(entry) in [TYPE_INT, TYPE_FLOAT]:
 				state.characters.append(int(entry))
+	state.best_run_day = int(data.get("best_run_day", 0))
+	state.runs_ended = int(data.get("runs_ended", 0))
 	if state.equipped_outfit != "" and not state.cosmetics.has(state.equipped_outfit):
 		push_error("ProfileState: equipped outfit is not owned")
 		return null

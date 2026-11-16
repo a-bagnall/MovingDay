@@ -113,7 +113,8 @@ static func style_label3d(label: Label3D) -> void:
 
 
 static func money(amount: float) -> String:
-	return "$%d" % roundi(amount)
+	var whole := roundi(amount)
+	return ("-$%d" % -whole) if whole < 0 else ("$%d" % whole)
 
 
 static func format_time(seconds: float) -> String:

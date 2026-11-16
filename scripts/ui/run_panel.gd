@@ -67,6 +67,7 @@ func _show_details() -> void:
 	_add_row(grid, "Contracts completed", str(state.contracts_completed))
 	_add_row(grid, "Total earned", UIKit.money(state.total_earned))
 	_add_row(grid, "Damage costs", UIKit.money(state.total_damage))
+	_add_row(grid, "Running costs", UIKit.money(state.total_overhead))
 	_add_row(grid, "Best day", UIKit.money(state.best_day))
 	if not state.perks.is_empty():
 		_add_row(grid, "Perks", ", ".join(state.perks))

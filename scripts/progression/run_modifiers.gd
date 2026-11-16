@@ -1,44 +1,24 @@
 class_name RunModifiers
 ## "Pick One" run modifiers: every few days the team picks one of three, and it stays
-## for the rest of the run. Each one is a detriment that adds chaos in its own way.
-## Perks (the helpful kind) are a separate future system and are never listed here.
+## for the rest of the run. Each one is a detriment that adds chaos or pressure in its own
+## way. Perks (the helpful kind) are a separate future system and are never listed here.
 ##
 ## Modifiers are stored on RunState (`modifiers`, as ids), so they save, resume and
 ## mirror to clients like the rest of the run.
 ##
-## Effects are looked up here by whoever needs them (Furniture, Player, StickyLinks...),
-## so adding a modifier means one entry below and one multiplier function.
+## All the numbers live in Balance. Effects are looked up here by whoever needs them
+## (Furniture, Player, StickyLinks, GameFlow...), so adding a modifier means one entry
+## below, one line in `description`, and one multiplier function.
 
-## A new choice is offered every this many days (it comes with the hub visit).
-const CHOOSE_EVERY_N_DAYS := 3
-const OFFER_SIZE := 3
-
+## Display data. Descriptions are built from Balance by `description()`.
 const ENTRIES := {
-	"butterfingers": {
-		"tag": "GRIP",
-		"name": "Butterfingers",
-		"description": "Grip drains 40% faster when you carry.",
-	},
-	"slippery_soles": {
-		"tag": "MOVEMENT",
-		"name": "Slippery Soles",
-		"description": "Everyone speeds up and stops 35% more slowly.",
-	},
-	"glass_cargo": {
-		"tag": "DAMAGE",
-		"name": "Glass Cargo",
-		"description": "Everything breaks 40% more easily.",
-	},
-	"heavy_lifting": {
-		"tag": "WEIGHT",
-		"name": "Heavy Lifting",
-		"description": "All furniture is 25% heavier.",
-	},
-	"extra_gum": {
-		"tag": "STICKY",
-		"name": "Gum Everywhere",
-		"description": "One extra pair of items is stuck together, even before day 3.",
-	},
+	"butterfingers": {"tag": "GRIP", "name": "Butterfingers"},
+	"slippery_soles": {"tag": "MOVEMENT", "name": "Slippery Soles"},
+	"glass_cargo": {"tag": "DAMAGE", "name": "Glass Cargo"},
+	"heavy_lifting": {"tag": "WEIGHT", "name": "Heavy Lifting"},
+	"extra_gum": {"tag": "STICKY", "name": "Gum Everywhere"},
+	"greedy_landlord": {"tag": "COSTS", "name": "Greedy Landlord"},
+	"cheapskate_clients": {"tag": "PAY", "name": "Cheapskate Clients"},
 }
 
 
@@ -61,8 +41,25 @@ static func tag(id: String) -> String:
 	return ENTRIES[id]["tag"] if ENTRIES.has(id) else "?"
 
 
+## What the modifier does, in words, from the current Balance numbers.
 static func description(id: String) -> String:
-	return ENTRIES[id]["description"] if ENTRIES.has(id) else ""
+	match id:
+		"butterfingers":
+			return "Grip drains %d%% faster when you carry." % _more(Balance.BUTTERFINGERS_GRIP_DRAIN)
+		"slippery_soles":
+			return "Everyone has %d%% less control: slower to speed up, slower to stop." % _less(Balance.SLIPPERY_SOLES_CONTROL)
+		"glass_cargo":
+			return "Everything breaks %d%% more easily." % _more(Balance.GLASS_CARGO_DAMAGE)
+		"heavy_lifting":
+			return "All furniture is %d%% heavier." % _more(Balance.HEAVY_LIFTING_MASS)
+		"extra_gum":
+			return "%d extra pairs of items are stuck together, even before day %d." % [
+				Balance.EXTRA_GUM_PAIRS, Balance.STICKY_FIRST_DAY]
+		"greedy_landlord":
+			return "Daily running costs are %d%% higher. Bankruptcy comes sooner." % _more(Balance.GREEDY_LANDLORD_COSTS)
+		"cheapskate_clients":
+			return "Clients pay %d%% less for every job." % _less(Balance.CHEAPSKATE_CLIENTS_PAY)
+	return ""
 
 
 static func names(ids: Array[String]) -> String:
@@ -74,7 +71,7 @@ static func names(ids: Array[String]) -> String:
 
 ## True if the hub before `day` should offer a choice the run has not made yet.
 static func choice_due(run: RunState) -> bool:
-	return run != null and run.day > 1 and (run.day - 1) % CHOOSE_EVERY_N_DAYS == 0 \
+	return run != null and run.day > 1 and (run.day - 1) % Balance.MODIFIER_EVERY_N_DAYS == 0 \
 		and run.modifier_day != run.day and not offer(run).is_empty()
 
 
@@ -88,7 +85,7 @@ static func offer(run: RunState) -> Array[String]:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("modifiers_%d_%d" % [run.slot, run.day])
 	var result: Array[String] = []
-	while result.size() < OFFER_SIZE and not pool.is_empty():
+	while result.size() < Balance.MODIFIER_OFFER_SIZE and not pool.is_empty():
 		result.append(pool.pop_at(rng.randi_range(0, pool.size() - 1)))
 	return result
 
@@ -96,21 +93,43 @@ static func offer(run: RunState) -> Array[String]:
 # --- effects -----------------------------------------------------------------
 
 static func grip_drain_multiplier() -> float:
-	return 1.4 if has("butterfingers") else 1.0
+	return Balance.BUTTERFINGERS_GRIP_DRAIN if has("butterfingers") else 1.0
 
 
 ## Scales how fast players speed up and brake.
 static func control_multiplier() -> float:
-	return 0.65 if has("slippery_soles") else 1.0
+	return Balance.SLIPPERY_SOLES_CONTROL if has("slippery_soles") else 1.0
 
 
 static func damage_multiplier() -> float:
-	return 1.4 if has("glass_cargo") else 1.0
+	return Balance.GLASS_CARGO_DAMAGE if has("glass_cargo") else 1.0
 
 
 static func mass_multiplier() -> float:
-	return 1.25 if has("heavy_lifting") else 1.0
+	return Balance.HEAVY_LIFTING_MASS if has("heavy_lifting") else 1.0
 
 
 static func extra_sticky_pairs() -> int:
-	return 1 if has("extra_gum") else 0
+	return Balance.EXTRA_GUM_PAIRS if has("extra_gum") else 0
+
+
+## Scales the end-of-day running costs.
+static func overhead_multiplier() -> float:
+	return Balance.GREEDY_LANDLORD_COSTS if has("greedy_landlord") else 1.0
+
+
+## Scales a contract's base pay.
+static func pay_multiplier() -> float:
+	return Balance.CHEAPSKATE_CLIENTS_PAY if has("cheapskate_clients") else 1.0
+
+
+# --- helpers -----------------------------------------------------------------
+
+## 1.6 -> 60 ("60% more").
+static func _more(multiplier: float) -> int:
+	return roundi((multiplier - 1.0) * 100.0)
+
+
+## 0.55 -> 45 ("45% less").
+static func _less(multiplier: float) -> int:
+	return roundi((1.0 - multiplier) * 100.0)

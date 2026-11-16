@@ -5,10 +5,10 @@ class_name ContractTracker
 
 signal contract_finished(result: Dictionary)
 
-const PAR_TIME := 120.0        ## Seconds under which a time bonus is earned.
-const TIME_BONUS_RATE := 2.0   ## Dollars per second under par.
+const PAR_TIME := Balance.PAR_TIME               ## Seconds under which a time bonus is earned.
+const TIME_BONUS_RATE := Balance.TIME_BONUS_RATE   ## Dollars per second under par.
 const FIRST_DAY_DEBUG_ITEM := "Box"
-const LOW_TIME_WARNING := 60.0   ## The day clock turns pink under this many seconds.
+const LOW_TIME_WARNING := Balance.LOW_TIME_WARNING   ## The day clock turns pink under this many seconds.
 
 var zone: DeliveryZone
 var required: Array[Furniture] = []
@@ -31,7 +31,7 @@ func setup(delivery_zone: DeliveryZone, items: Array[Furniture], job_contract: C
 
 	# Keep day one deliberately simple while the progression loop is being tested.
 	# Retain the lightweight, single-player Box and remove the other spawned items.
-	if SaveManager.run != null and SaveManager.run.day == 1:
+	if Balance.DAY_ONE_SINGLE_ITEM and SaveManager.run != null and SaveManager.run.day == 1:
 		var debug_item: Furniture
 		for item in items:
 			if item.data != null and item.data.display_name == FIRST_DAY_DEBUG_ITEM:
@@ -158,15 +158,15 @@ func _finish() -> void:
 	var delivered := zone.delivered_items.size()
 	var damage := total_damage()
 	var completion := float(delivered) / float(maxi(required.size(), 1))
-	var base := contract.payout * completion if contract else 500.0 * completion
+	var base := (contract.payout if contract else 500.0) * completion * RunModifiers.pay_multiplier()
 	var time_bonus := maxf(0.0, PAR_TIME - elapsed) * TIME_BONUS_RATE
 	var style_rate := 0.0
 	if SaveManager.profile != null:
 		match SaveManager.profile.equipped_outfit:
 			"workwear":
-				style_rate = 0.10
+				style_rate = Balance.WORKWEAR_STYLE_BONUS
 			"enchanted_workwear":
-				style_rate = 0.15
+				style_rate = Balance.ENCHANTED_WORKWEAR_STYLE_BONUS
 	var style_bonus := (base + time_bonus) * style_rate
 	var payment := maxf(0.0, base + time_bonus + style_bonus - damage)
 	var result := {

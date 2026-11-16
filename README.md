@@ -20,6 +20,14 @@ Characters: a new player picks one on joining (left/right to choose, interact to
 
 From day 3 some furniture is stuck together in pink-gummed pairs (more every 5 days). Every 3 days, at the hub, the host gets a **Pick One** card: three modifiers side by side (left/right to look, Enter or gamepad A to pick). Each is a detriment that adds chaos for the rest of the run. The ones in play show as tags during a job, in the hub, and on the run slot's details card. Perks (helpful, earned by levelling up) are a separate, future system.
 
+## Running costs and how a run ends
+
+At the end of every day the company pays running costs ($150 on day 1, +$60 each day; Greedy Landlord makes it 35% more). The briefing shows them, and the hub shows what a day costs. If that takes the wallet below zero the company is bankrupt: the run slot is deleted, the **Run Over** screen shows how it went, and everyone returns to the main menu. Each ended run is also appended to `run_history.jsonl` in the user data folder (Godot: Project > Open User Data Folder) so you can compare playtests.
+
+## Tuning
+
+All the balance numbers (day length, pay, running costs, modifier strengths, shop prices, sticky pairs) live in `scripts/progression/balance.gd`. Pick One and shop text is built from them, so changing a number is one edit. Note `DAY_LENGTH` is 10 seconds (one contract a day) and day 1 is a single Box; both are flags there for the testing phase.
+
 Heavy items need two players (one player can lift them, but loses grip easily). Press interact on the results screen to continue. Press F3 for a debug overlay showing grip, damage and impact values.
 
 ## Online (LAN or internet)

@@ -79,10 +79,13 @@ func begin_day() -> void:
 
 
 ## `result` is the accumulated day summary, not an individual contract result.
-func end_day(result: Dictionary) -> void:
+## `overhead` is the day's running costs; it can take the wallet below zero (the caller
+## decides what that means).
+func end_day(result: Dictionary, overhead := 0.0) -> void:
 	assert(run != null, "end_day called with no active run")
 	assert(result.has("payment"), "end_day: result has no 'payment'")
-	run.wallet += float(result["payment"])
+	run.wallet += float(result["payment"]) - overhead
+	run.total_overhead += overhead
 	run.contracts_completed += int(result.get("contracts_completed", 0))
 	run.total_earned += float(result["payment"])
 	run.total_damage += float(result.get("damage", 0.0))

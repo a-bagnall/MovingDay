@@ -21,6 +21,7 @@ var contracts_completed := 0
 var total_earned := 0.0
 var total_damage := 0.0
 var best_day := 0.0   # biggest take-home of any single day
+var total_overhead := 0.0   # running costs paid at the end of every day so far
 ## One-day shop boosts. The day number prevents them carrying into later jobs.
 var speed_boost_day := 0
 var speed_boost := 1.0
@@ -41,6 +42,7 @@ func to_dict() -> Dictionary:
 		"total_earned": total_earned,
 		"total_damage": total_damage,
 		"best_day": best_day,
+		"total_overhead": total_overhead,
 		"speed_boost_day": speed_boost_day,
 		"speed_boost": speed_boost,
 		"acceleration_boost_day": acceleration_boost_day,
@@ -71,6 +73,7 @@ static func from_dict(data: Dictionary) -> RunState:
 	state.total_earned = float(data.get("total_earned", 0.0))
 	state.total_damage = float(data.get("total_damage", 0.0))
 	state.best_day = float(data.get("best_day", 0.0))
+	state.total_overhead = float(data.get("total_overhead", 0.0))
 	state.speed_boost_day = int(data.get("speed_boost_day", 0))
 	state.speed_boost = float(data.get("speed_boost", 1.0))
 	state.acceleration_boost_day = int(data.get("acceleration_boost_day", 0))

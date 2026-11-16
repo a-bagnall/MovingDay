@@ -8,9 +8,9 @@ extends Node
 ## mate and draws the gum blob; only the host (or an offline game) makes the actual
 ## physics joint, because the host simulates the furniture and streams the result.
 
-const FIRST_STICKY_DAY := 3
-const PAIR_EVERY_DAYS := 5   # one more stuck pair this many days after the last
-const MAX_PAIRS := 3
+const FIRST_STICKY_DAY := Balance.STICKY_FIRST_DAY
+const PAIR_EVERY_DAYS := Balance.STICKY_PAIR_EVERY_DAYS   # one more stuck pair this many days after the last
+const MAX_PAIRS := Balance.STICKY_MAX_PAIRS
 ## Pairs heavier than this are skipped, so a stuck pair can always be moved by its team.
 const MAX_COMBINED_MASS := 85.0
 ## Pairs further apart than this vertically are on different floors, and skipped.
@@ -23,8 +23,8 @@ const GUM_COLOR := Color(1.0, 0.45, 0.7)
 var pairs_made := 0
 
 
-## How many stuck pairs a job on `day` has: 1 from day 3, one more every 5 days, and
-## one more with the Gum Everywhere modifier.
+## How many stuck pairs a job on `day` has: 1 from the first sticky day, one more every
+## few days, and extra ones with the Gum Everywhere modifier (all numbers in Balance).
 static func pair_count(day: int) -> int:
 	var base := 0
 	if day >= FIRST_STICKY_DAY:

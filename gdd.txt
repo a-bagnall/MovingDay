@@ -329,7 +329,11 @@ Sticky Objects (implemented)
 Run Modifiers: "Pick One" (implemented)
 - Every n days (currently 3, at the hub visit) the host picks one modifier from three (shown side by side on a "Pick One" card), similar to PlateUp!.
 - Modifiers are detriments, not rewards: each adds chaos for the rest of that run (butterfingers, slippery soles, glass cargo, heavy lifting, extra gum...).
-- They are intended to be an eventual run killer. The run slot's details card and the hub list the ones in play.
+- They are intended to be an eventual run killer. Seven exist: butterfingers, slippery soles, glass cargo, heavy lifting, gum everywhere (physical chaos) and greedy landlord, cheapskate clients (economic pressure).
+- All numbers are in scripts/progression/balance.gd. The run slot's details card and the hub list the ones in play.
+Running Costs and Bankruptcy (implemented)
+- At the end of each day the company pays running costs: $150 on day 1, +$60 per day (Balance.OVERHEAD_*). The briefing shows them and the hub shows the day's cost.
+- If the wallet goes below zero the company is bankrupt: the run ends, its slot is deleted (the profile stays) and a Run Over screen shows the run's stats. This is the run killer that modifiers push the team towards.
 Perks (planned, a separate system from modifiers)
 - Perks are things the player chooses to bring into a run that aid them.
 - They are rewards from levelling up, not a difficulty trade.

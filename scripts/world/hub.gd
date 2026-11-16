@@ -9,11 +9,16 @@ const TRUCK_PAD_CENTER := Vector3(0.5, 0.0, 0.0)
 const TRUCK_PAD_SIZE := Vector3(3.5, 0.1, 4.0)
 const TRUCK_PAD_COLOR := Color(0.4, 0.8, 0.5)
 
-const SHOP_ITEMS := {
-	"coffee": {"name": "Coffee", "price": 50, "description": "+15% move speed for the next day"},
-	"energy": {"name": "Energy Drink", "price": 60, "description": "+20% acceleration for the next day"},
-	"workwear": {"name": "Company Outfit", "price": 150, "description": "+10% earnings style bonus"},
-	"enchanted_workwear": {"name": "Lucky Enchanted Outfit", "price": 400, "description": "+15% earnings style bonus"},
+## Built from Balance, so prices and effect text always match the numbers.
+static var SHOP_ITEMS := {
+	"coffee": {"name": "Coffee", "price": Balance.COFFEE_PRICE,
+		"description": "+%d%% move speed for the next day" % roundi((Balance.COFFEE_SPEED - 1.0) * 100.0)},
+	"energy": {"name": "Energy Drink", "price": Balance.ENERGY_PRICE,
+		"description": "+%d%% acceleration for the next day" % roundi((Balance.ENERGY_ACCELERATION - 1.0) * 100.0)},
+	"workwear": {"name": "Company Outfit", "price": Balance.WORKWEAR_PRICE,
+		"description": "+%d%% earnings style bonus" % roundi(Balance.WORKWEAR_STYLE_BONUS * 100.0)},
+	"enchanted_workwear": {"name": "Lucky Enchanted Outfit", "price": Balance.ENCHANTED_WORKWEAR_PRICE,
+		"description": "+%d%% earnings style bonus" % roundi(Balance.ENCHANTED_WORKWEAR_STYLE_BONUS * 100.0)},
 }
 
 var _truck_pad: InteractZone
@@ -91,8 +96,9 @@ func _process(delta: float) -> void:
 
 	_truck_pad.set_text(_pad_text() if _countdown < 0.0 else "Starting in %d" % ceili(_countdown))
 	_notice_time = maxf(0.0, _notice_time - delta)
-	var status_text := "DAY %d  |  WALLET %s\nBuy a boost or outfit, then all players stand on the truck pad" % [
-		SaveManager.run.day, UIKit.money(SaveManager.run.wallet)]
+	var status_text := "DAY %d  |  WALLET %s  |  RUNNING COSTS %s a day\nBuy a boost or outfit, then all players stand on the truck pad" % [
+		SaveManager.run.day, UIKit.money(SaveManager.run.wallet),
+		UIKit.money(GameFlow.overhead_for_day(SaveManager.run.day))]
 	if not SaveManager.run.modifiers.is_empty():
 		status_text += "\nModifiers: " + RunModifiers.names(SaveManager.run.modifiers)
 	if waiting_for_choice and not _choosing:
@@ -119,13 +125,13 @@ func _on_shop_interacted(_player_id: int, item_id: String) -> void:
 				_set_notice("Coffee is already active for this day")
 				return
 			SaveManager.run.speed_boost_day = SaveManager.run.day
-			SaveManager.run.speed_boost = 1.15
+			SaveManager.run.speed_boost = Balance.COFFEE_SPEED
 		"energy":
 			if SaveManager.run.acceleration_boost_day == SaveManager.run.day:
 				_set_notice("Your energy drink is already active for this day")
 				return
 			SaveManager.run.acceleration_boost_day = SaveManager.run.day
-			SaveManager.run.acceleration_boost = 1.20
+			SaveManager.run.acceleration_boost = Balance.ENERGY_ACCELERATION
 		"workwear", "enchanted_workwear":
 			SaveManager.profile.cosmetics.append(item_id)
 			SaveManager.profile.equipped_outfit = item_id
