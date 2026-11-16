@@ -8,7 +8,7 @@ Open the project in Godot 4.7 and press F5.
 
 ## Controls
 
-The game starts in the main menu. Hold the interact button there to claim a player slot (first to join is P1), then stand on a run slot pad and press interact. An empty slot starts a new run; a saved one opens its details (day, wallet, contracts completed, earnings, damage, last saved) with Continue, Delete and Back. Move with the arrow keys or d-pad and press Enter or gamepad A; Delete asks for confirmation and frees the slot. A run is a series of days, each a job. Every 3 days the players visit the hub (walk onto the truck pad together to start the next job). The game saves only at the start and end of a day.
+The game starts in the main menu. Hold the interact button there to claim a player slot (first to join is P1), then stand on a run slot pad and press interact. An empty slot starts a new run; a saved one opens its details (day, wallet, contracts completed, earnings, damage, last saved) with Continue, Delete and Back. Move with the arrow keys or d-pad and press Enter or gamepad A; Delete asks for confirmation and frees the slot. A run is a series of days, each a job. Every 3 days the players visit the hub (walk onto the truck pad together to start the next job). The game saves only at the start and end of a day. You can play a whole run solo: a lone player can carry two-player items, but only at a slow walk, and nothing heavy is ever stuck to another item.
 
 | Source | Move | Interact (grab / drop) |
 | --- | --- | --- |

@@ -65,6 +65,14 @@ const GREEDY_LANDLORD_COSTS := 1.35        # running costs
 const CHEAPSKATE_CLIENTS_PAY := 0.8        # LOWER is worse: base contract pay
 
 
+# --- Solo play ------------------------------------------------------------------------
+
+## One player can do every job. When a single player is the whole team, a two-player item can
+## be carried alone, with no grip loss, at this fraction of walking speed (a one-player item
+## alone moves at up to 0.7, a team of two at up to 0.95). Lower = harder.
+const SOLO_HEAVY_SPEED := 0.45
+
+
 # --- Sticky pairs ---------------------------------------------------------------------
 
 const STICKY_FIRST_DAY := 3

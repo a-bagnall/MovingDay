@@ -115,6 +115,18 @@ func player_count() -> int:
 	return total
 
 
+## Players that make up this game: everyone online, or the players on this machine when
+## offline.
+func session_player_count() -> int:
+	return player_count() if is_online() else InputSetup.assigned_count()
+
+
+## True when one player is the whole team. Jobs stay possible alone: two-player items can
+## be carried by one person, slowly (Balance.SOLO_HEAVY_SPEED).
+func is_solo() -> bool:
+	return session_player_count() <= 1
+
+
 ## Connected machines, including this one.
 func peer_count() -> int:
 	return _roster.size()

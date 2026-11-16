@@ -71,7 +71,7 @@ class Chooser:
 func _physics_process(delta: float) -> void:
 	super(delta)
 	# A player who has just arrived (and has not chosen before) picks right away.
-	var ids := InputSetup.local_player_ids()
+	var ids: Array[int] = InputSetup.local_player_ids()   # typed: `:=` fails to infer on a fresh import
 	for ordinal in ids.size():
 		var id: int = ids[ordinal]
 		if CharacterCatalog.choices.has(id) or _choosers.has(id):

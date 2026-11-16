@@ -76,6 +76,8 @@ func _best_mate(a: Furniture, pool: Array[Furniture]) -> Furniture:
 			continue
 		if a.data.players_required > 1 and b.data.players_required > 1:
 			continue
+		if NetworkManager.is_solo() and (a.data.players_required > 1 or b.data.players_required > 1):
+			continue   # alone, a two-player item stuck to anything is too much to haul
 		var distance := a.position.distance_to(b.position)
 		if distance < best_distance:
 			best_distance = distance

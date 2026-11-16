@@ -184,6 +184,7 @@ Some items that normally need two players can be lifted by one player, but the g
 - When grip is lost the item falls, with the usual damage consequences, and the player may stumble.
 - Teams can also lose grip, though far less easily: violent spinning or players pulling in opposite directions shakes the item loose.
 - Solo carrying is a risky shortcut that rewards confidence and punishes carelessness, and it never replaces the benefit of working together.
+- A run with a single player is fully playable. With nobody else to help, the lone player is the whole team: two-player items can be carried alone with no grip loss, but only at a slow walk (Balance.SOLO_HEAVY_SPEED), and no heavy item is ever stuck to another. Jobs, pay and running costs are unchanged, so solo is simply harder.
 Physics Implementation
 Use Godot 4's 3D physics system.
 Recommended components:

@@ -154,6 +154,8 @@ func _build_visual() -> void:
 	var label := Label3D.new()
 	# Say who can carry it, so it "makes sense" before anyone tries.
 	var who := "2 players" if data.players_required >= 2 else "1 player"
+	if data.players_required >= 2 and NetworkManager.is_solo():
+		who += " (slow alone)"
 	label.text = "%s\n%s - %s" % [data.display_name, _tier_text(), who]
 	label.modulate = _tier_color()
 	label.outline_size = 8
@@ -409,7 +411,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var holder_count := _holders.size()
-	var lift := clampf(float(holder_count) / float(data.players_required), 0.0, 1.0)
+	var lift := clampf(float(holder_count) / float(_players_needed()), 0.0, 1.0)
 	gravity_scale = lerpf(1.0, HOLD_GRAVITY_SCALE, lift)
 
 	var drop_list: Array[Player] = []
@@ -476,12 +478,18 @@ func pull_holder(player: Player, delta: float) -> void:
 		return
 
 
+## How many players it takes to lift this item right now. A lone player is the whole team,
+## so for them everything is a one-person lift (slowly, see _update_player_speed).
+func _players_needed() -> int:
+	return 1 if NetworkManager.is_solo() else data.players_required
+
+
 ## Returns true when the grip has given out and everyone should let go.
 func _update_grip(delta: float, strain: float) -> bool:
 	if _grip_grace > 0.0:
 		_grip_grace -= delta   # settling in after the grab: no slipping yet
 		return false
-	if _holders.size() >= data.players_required:
+	if _holders.size() >= _players_needed():
 		# A full team is steady, but wild swinging or players pulling apart
 		# still shakes the grip loose.
 		var shake := maxf(angular_velocity.length() - TEAM_SWING_FREE, 0.0) * TEAM_SLIP_PER_SWING \
@@ -508,6 +516,8 @@ func _update_player_speed(lift: float, strain: float) -> void:
 	var mult := clampf(cap - weight_factor * 0.4, 0.3, cap)
 	if lift < 1.0:
 		mult = minf(mult, 0.3)   # not enough people: drag, don't lift
+	if data.players_required >= 2 and NetworkManager.is_solo():
+		mult = Balance.SOLO_HEAVY_SPEED   # a whole two-person item on one back
 	mult *= clampf(1.0 - maxf(strain - 0.8, 0.0) / 2.5, 0.25, 1.0)
 	net_speed_mult = mult
 	for player in _holders.values():
