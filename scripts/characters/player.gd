@@ -246,6 +246,15 @@ func _throw(charge: float) -> void:
 		net_ignore_holds_until = Time.get_ticks_msec() + 400
 
 
+## 1.0 on dry floor; very low while standing in one of the Wet Floors puddles.
+func _floor_grip() -> float:
+	for puddle: Node3D in get_tree().get_nodes_in_group(SlipPatches.GROUP):
+		var distance := Vector2(puddle.global_position.x - global_position.x, puddle.global_position.z - global_position.z).length()
+		if distance < float(puddle.get_meta("radius", 0.0)) and absf(puddle.global_position.y - global_position.y) < 1.0:
+			return Balance.WET_FLOORS_CONTROL
+	return 1.0
+
+
 func _shove() -> void:
 	var facing := get_facing()
 	var target_player: Player = null
@@ -641,7 +650,7 @@ func _physics_process(delta: float) -> void:
 	var control := 0.25 if _stumble_left > 0.0 else 1.0
 	var target := input_dir * max_speed * shop_speed_multiplier * speed_multiplier * control
 	var rate := acceleration * shop_acceleration_multiplier if input_dir.length() > 0.01 else braking
-	rate *= lerpf(0.5, 1.0, speed_multiplier) * RunModifiers.control_multiplier()
+	rate *= lerpf(0.5, 1.0, speed_multiplier) * RunModifiers.control_multiplier() * _floor_grip()
 	if horizontal.dot(target) < 0.0:
 		rate *= reversal_penalty
 	horizontal = horizontal.move_toward(target, rate * delta)

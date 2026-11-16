@@ -18,6 +18,8 @@ The game starts in the main menu. Hold the interact button there to claim a play
 
 Hold Lift while carrying to raise the item over rails and counters (it costs grip, so it is a move, not a pose). Ping drops a marker in your colour ahead of you, or on the item you face, for a few seconds, and everyone sees it. Your colour shows as a ring under your feet; pick it on the Wardrobe pad with up/down (left/right still picks the animal). With empty hands, Action shoves whatever is in front of you: a teammate gets knocked back, and furniture slides (sturdy things shrug it off, fragile things tend to break). It has a one-second cooldown. While carrying a light one-player item (10 kg or less), hold Action to wind up and release to throw it; a quick tap is a short toss. Damage on landing uses the normal impact rules.
 
+The Wet Floors Pick One card puts slick puddles on the ground floor along the routes to the truck; standing in one leaves you almost no control.
+
 Heave-ho has its own button: when everyone carrying a two-person item presses it within a third of a second, the team gets a short burst of speed and a fresh grip (it then has a four-second cooldown).
 
 Characters: a new player picks one on joining (left/right to choose, interact to confirm), and anyone can change it later on the pink Wardrobe pad. Everyone sees everyone's pick, online too. Each character is scaled to a set height in `scripts/characters/character_catalog.gd`; if one looks backwards in game, change its `yaw` there.

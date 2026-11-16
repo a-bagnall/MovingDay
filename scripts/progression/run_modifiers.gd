@@ -19,6 +19,7 @@ const ENTRIES := {
 	"extra_gum": {"tag": "STICKY", "name": "Gum Everywhere"},
 	"greedy_landlord": {"tag": "COSTS", "name": "Greedy Landlord"},
 	"cheapskate_clients": {"tag": "PAY", "name": "Cheapskate Clients"},
+	"wet_floors": {"tag": "FLOORS", "name": "Wet Floors"},
 }
 
 
@@ -59,6 +60,8 @@ static func description(id: String) -> String:
 			return "Daily running costs are %d%% higher. Bankruptcy comes sooner." % _more(Balance.GREEDY_LANDLORD_COSTS)
 		"cheapskate_clients":
 			return "Clients pay %d%% less for every job." % _less(Balance.CHEAPSKATE_CLIENTS_PAY)
+		"wet_floors":
+			return "%d slick puddles appear on the way to the truck. Step in one and you can barely steer or stop." % Balance.WET_FLOORS_PUDDLES
 	return ""
 
 

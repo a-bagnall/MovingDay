@@ -64,6 +64,11 @@ const EXTRA_GUM_PAIRS := 2                 # extra stuck-together pairs (still c
 const GREEDY_LANDLORD_COSTS := 1.35        # running costs
 const CHEAPSKATE_CLIENTS_PAY := 0.8        # LOWER is worse: base contract pay
 
+## Wet Floors: slick puddles on the ground floor, on the way from the furniture to the truck.
+const WET_FLOORS_PUDDLES := 4              # how many
+const WET_FLOORS_RADIUS := 0.9             # metres
+const WET_FLOORS_CONTROL := 0.2            # LOWER is worse: control (acceleration and braking) while standing in one
+
 
 # --- Solo play ------------------------------------------------------------------------
 

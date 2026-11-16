@@ -78,6 +78,9 @@ func _ready() -> void:
 	var sticky := StickyLinks.new()
 	add_child(sticky)
 	sticky.setup(items, SaveManager.run.day, SaveManager.run.slot)   # day 3+: some items are stuck together
+	var puddles := SlipPatches.new()
+	add_child(puddles)
+	puddles.setup(items, Vector3(TRUCK_FOOT_X, 0.0, 0.0), SaveManager.run.day, SaveManager.run.slot)   # Wet Floors only
 	if NetworkManager.is_online():
 		var sync := JobSync.new()
 		sync.name = "JobSync"
