@@ -59,13 +59,6 @@ func _build_ui() -> void:
 		GameFlow.day_contract_count,
 	]
 	column.add_child(UIKit.label(subtitle, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
-	var run_notes := PackedStringArray()
-	if not SaveManager.run.modifiers.is_empty():
-		run_notes.append("MODIFIERS: %s" % RunModifiers.names(SaveManager.run.modifiers).to_upper())
-	if GameFlow.current_contract != null and StickyLinks.pair_count(SaveManager.run.day) > 0:
-		run_notes.append("HEADS UP: SOME ITEMS ARE STUCK TOGETHER")
-	if not run_notes.is_empty():
-		column.add_child(UIKit.label("  |  ".join(run_notes), UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
 
 	var panels := HBoxContainer.new()
 	panels.add_theme_constant_override("separation", 20)
@@ -130,23 +123,14 @@ func _build_next_panel() -> Control:
 		column.add_child(_contract_label("END OF DAY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
 		column.add_child(_contract_label("No more contracts today. Your team has finished the shift.", UIKit.FONT_BODY))
 		column.add_child(_contract_label("DAY TOTAL", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-		var take_home := float(GameFlow.day_total.get("payment", 0.0))
-		var overhead := GameFlow.overhead_for_day(SaveManager.run.day)
-		var wallet_after := SaveManager.run.wallet + take_home - overhead
-		column.add_child(_contract_label("Contracts completed: %d\nTotal base pay: %s\nTime bonuses: %s\nStyle bonuses: %s\nDamage costs: -%s\n\nTAKE-HOME: %s\nRunning costs: -%s\nWALLET AFTER: %s" % [
+		column.add_child(_contract_label("Contracts completed: %d\nTotal base pay: %s\nTime bonuses: %s\nStyle bonuses: %s\nDamage costs: -%s\n\nTAKE-HOME: %s" % [
 			int(GameFlow.day_total.get("contracts_completed", 0)),
 			UIKit.money(float(GameFlow.day_total.get("base_pay", 0.0))),
 			UIKit.money(float(GameFlow.day_total.get("time_bonus", 0.0))),
 			UIKit.money(float(GameFlow.day_total.get("style_bonus", 0.0))),
 			UIKit.money(float(GameFlow.day_total.get("damage", 0.0))),
-			UIKit.money(take_home),
-			UIKit.money(overhead),
-			UIKit.money(wallet_after),
+			UIKit.money(float(GameFlow.day_total.get("payment", 0.0))),
 		], UIKit.FONT_BODY))
-		if wallet_after < 0.0:
-			var warning := _contract_label("THE COMPANY CANNOT COVER ITS COSTS.\nThis run ends when you continue.", UIKit.FONT_BODY)
-			warning.add_theme_color_override("font_color", UIKit.PINK)
-			column.add_child(warning)
 		return panel
 
 	var contract := GameFlow.current_contract
