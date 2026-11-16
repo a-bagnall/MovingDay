@@ -7,7 +7,7 @@ extends Node3D
 ## Players use CharacterCatalog; replace placeholder furniture with real models via
 ## FURNITURE_MODELS below (res:// paths to .glb files).
 
-const WALL_HEIGHT := 1.2   # low walls keep the iso view readable until cutaways exist
+const WALL_HEIGHT := 2.0   # tall collision walls prevent players climbing out of the property
 const WALL_THICKNESS := 0.3
 
 ## Furniture key -> model path.

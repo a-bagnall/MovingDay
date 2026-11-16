@@ -75,6 +75,8 @@ var _grip_strength := 1.0       ## 1 = secure, 0 = slips free. Only drains when 
 var _grip_grace := 0.0
 var _damage_cooldown := 0.0
 var _flash := 0.0
+var _grip_warning_flash := 0.0
+var _last_grip_warning := false
 var _time := 0.0
 var _shake := 0.0               ## Damage jitter, 1 -> 0.
 var _prev_vy := 0.0
@@ -297,6 +299,11 @@ func _process(delta: float) -> void:
 	if is_held():
 		wobble = clampf((WOBBLE_START - _grip_strength) / WOBBLE_START, 0.0, 1.0)
 	var tilt := wobble * WOBBLE_ANGLE
+	var warning := is_held() and _grip_strength <= 0.4
+	if warning and not _last_grip_warning:
+		_grip_warning_flash = 1.0
+	_last_grip_warning = warning
+	_grip_warning_flash = maxf(_grip_warning_flash - delta * 2.8, 0.0)
 	_visual.rotation = Vector3(sin(_time * 23.0) * tilt, 0.0, sin(_time * 19.0 + 1.0) * tilt)
 	_shake = maxf(_shake - delta * 4.0, 0.0)
 	_visual.position = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)) * _shake * 0.08
@@ -368,7 +375,7 @@ func _show_damage_popup(amount: float) -> void:
 	if parent == null:
 		return
 	var label := Label3D.new()
-	label.text = "-$%d" % maxi(roundi(amount), 1)
+	label.text = "IMPACT  -$%d" % maxi(roundi(amount), 1)
 	label.modulate = Color(1.0, 0.3, 0.3)
 	label.outline_size = 10
 	UIKit.style_label3d(label)
@@ -669,6 +676,7 @@ func _apply_damage(excess: float) -> void:
 	total_damage += amount
 	_damage_cooldown = 0.25
 	_flash = 1.0
+	_grip_warning_flash = 0.0
 	_shake = 1.0
 	_show_damage_popup(amount)
 	damaged.emit(amount, total_damage)
@@ -680,4 +688,6 @@ func _update_flash(delta: float) -> void:
 		return
 	var ratio := clampf(total_damage / maxf(data.value, 0.01), 0.0, 1.0)
 	var worn := _base_color.lerp(Color(0.35, 0.1, 0.1), ratio * 0.6)
-	_material.albedo_color = worn.lerp(Color.RED, _flash)
+	var warning_color := Color(1.0, 0.62, 0.12)
+	var warning_strength := _grip_warning_flash * (0.35 if is_held() and _grip_strength <= 0.4 else 0.0)
+	_material.albedo_color = worn.lerp(warning_color, warning_strength).lerp(Color.RED, _flash)
