@@ -46,3 +46,42 @@ static func choose(player_id: int, index: int) -> void:
 
 static func character_name(index: int) -> String:
 	return ENTRIES[clamp_index(index)]["name"]
+
+
+# --- player colours -------------------------------------------------------------------
+## Each player has a colour: a ring under their feet, and the colour of their pings.
+
+const COLORS: Array[Color] = [
+	Color("e0523f"), Color("f29a2e"), Color("f2d33c"), Color("7cc242"),
+	Color("2fb5a6"), Color("4aa3e0"), Color("8a63d2"), Color("ec6fa8"),
+]
+const COLOR_NAMES: Array[String] = ["Tomato", "Tangerine", "Sunshine", "Lime", "Teal", "Sky", "Violet", "Bubblegum"]
+## Who gets what until they choose: players 1-4 start with four clearly different colours.
+const DEFAULT_COLORS: Array[int] = [5, 0, 3, 7]
+
+## player id -> index into COLORS, like `choices`.
+static var colors: Dictionary = {}
+
+
+static func color_count() -> int:
+	return COLORS.size()
+
+
+static func clamp_color(index: Variant) -> int:
+	if not (index is int):
+		return 0
+	return clampi(index, 0, COLORS.size() - 1)
+
+
+static func color_index_for(player_id: int) -> int:
+	if colors.has(player_id):
+		return clamp_color(colors[player_id])
+	return DEFAULT_COLORS[posmod(player_id - 1, DEFAULT_COLORS.size())]
+
+
+static func choose_color(player_id: int, index: int) -> void:
+	colors[player_id] = clamp_color(index)
+
+
+static func color_for(player_id: int) -> Color:
+	return COLORS[color_index_for(player_id)]

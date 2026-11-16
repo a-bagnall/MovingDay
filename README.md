@@ -16,7 +16,7 @@ The game starts in the main menu. Hold the interact button there to claim a play
 | Keyboard 2 | Arrow keys | Enter | Right Shift | Right Ctrl | / |
 | Gamepad | Left stick | A | Left trigger | X | Y |
 
-Hold Lift while carrying to raise the item over rails and counters (it costs grip, so it is a move, not a pose). Action and Ping are wired up but do nothing yet; they arrive in later steps.
+Hold Lift while carrying to raise the item over rails and counters (it costs grip, so it is a move, not a pose). Ping drops a marker in your colour ahead of you, or on the item you face, for a few seconds, and everyone sees it. Your colour shows as a ring under your feet; pick it on the Wardrobe pad with up/down (left/right still picks the animal). Action is wired up but does nothing yet.
 
 Characters: a new player picks one on joining (left/right to choose, interact to confirm), and anyone can change it later on the pink Wardrobe pad. Everyone sees everyone's pick, online too. Each character is scaled to a set height in `scripts/characters/character_catalog.gd`; if one looks backwards in game, change its `yaw` there.
 

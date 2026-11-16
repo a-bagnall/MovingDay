@@ -166,6 +166,26 @@ func remember_character(ordinal: int, character: int) -> void:
 	_write_json(PROFILE_PATH, profile.to_dict())
 
 
+## Same for the colour.
+func remember_color(ordinal: int, color: int) -> void:
+	if ordinal < 0 or ordinal >= InputSetup.MAX_PLAYERS:
+		return
+	while profile.colors.size() <= ordinal:
+		profile.colors.append(-1)
+	if profile.colors[ordinal] == color:
+		return
+	profile.colors[ordinal] = color
+	_write_json(PROFILE_PATH, profile.to_dict())
+
+
+## The remembered colour for the `ordinal`-th local player, or -1.
+func remembered_color(ordinal: int) -> int:
+	if ordinal < 0 or ordinal >= profile.colors.size():
+		return -1
+	var value := profile.colors[ordinal]
+	return value if value >= 0 and value < CharacterCatalog.color_count() else -1
+
+
 ## The remembered character for the `ordinal`-th local player, or -1.
 func remembered_character(ordinal: int) -> int:
 	if ordinal < 0 or ordinal >= profile.characters.size():

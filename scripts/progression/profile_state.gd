@@ -14,6 +14,8 @@ var equipped_outfit := ""
 ## Preferred character (CharacterCatalog index) for the 1st, 2nd... player on this
 ## computer, so a pick is remembered next launch. Optional in the file.
 var characters: Array[int] = []
+## Same idea for the colour (CharacterCatalog.COLORS index); -1 = not chosen.
+var colors: Array[int] = []
 ## Lifetime run record, for comparing playtest runs. Optional in the file.
 var best_run_day := 0      # most days completed in any run that ended
 var runs_ended := 0
@@ -26,6 +28,7 @@ func to_dict() -> Dictionary:
 		"cosmetics": cosmetics.duplicate(),
 		"equipped_outfit": equipped_outfit,
 		"characters": characters.duplicate(),
+		"colors": colors.duplicate(),
 		"best_run_day": best_run_day,
 		"runs_ended": runs_ended,
 	}
@@ -48,6 +51,11 @@ static func from_dict(data: Dictionary) -> ProfileState:
 		push_error("ProfileState: 'equipped_outfit' is not a string")
 		return null
 	state.equipped_outfit = equipped
+	var saved_colors: Variant = data.get("colors", [])
+	if typeof(saved_colors) == TYPE_ARRAY:
+		for entry in saved_colors:
+			if typeof(entry) in [TYPE_INT, TYPE_FLOAT]:
+				state.colors.append(int(entry))
 	var saved_characters: Variant = data.get("characters", [])
 	if typeof(saved_characters) == TYPE_ARRAY:   # lenient: older files have none, bad entries are skipped
 		for entry in saved_characters:

@@ -38,6 +38,8 @@ signal pushes_received(peer_id: int, pushes: Array)
 signal job_state_received(payload: Array)
 ## Client only: the host says one of this machine's players lost its grip.
 signal stumble_received(player_id: int)
+## Someone (on another machine) pinged a spot: [player id, world position].
+signal ping_received(player_id: int, position: Vector3)
 
 const DEFAULT_PORT := 7777
 
@@ -183,6 +185,17 @@ func send_pushes(pushes: Array) -> void:
 func send_stumble(peer_id: int, player_id: int) -> void:
 	if mode == Mode.HOST and _is_connected():
 		_receive_stumble.rpc_id(peer_id, player_id)
+
+
+## Tells everyone else that local player `player_id` pinged `position`. A client sends it
+## to the host, which checks the player is the sender's and passes it on.
+func send_ping(player_id: int, position: Vector3) -> void:
+	if not _is_connected():
+		return
+	if mode == Mode.CLIENT:
+		_request_ping.rpc_id(1, player_id, position)
+	elif mode == Mode.HOST:
+		_relay_ping.rpc(player_id, position)
 
 
 ## Whether messages can be sent right now (online and the connection is up).
@@ -416,6 +429,24 @@ func _receive_pushes(pushes: Array) -> void:
 @rpc("authority", "call_remote", "reliable")
 func _receive_stumble(player_id: int) -> void:
 	stumble_received.emit(player_id)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_ping(player_id: int, position: Vector3) -> void:
+	if mode != Mode.HOST:
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not _roster.get(sender, []).has(player_id):
+		return   # not one of that machine's players
+	ping_received.emit(player_id, position)
+	for peer in multiplayer.get_peers():
+		if peer != sender:
+			_relay_ping.rpc_id(peer, player_id, position)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _relay_ping(player_id: int, position: Vector3) -> void:
+	ping_received.emit(player_id, position)
 
 
 # --- connection events (client side) ----------------------------------------

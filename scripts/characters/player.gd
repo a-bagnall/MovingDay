@@ -35,6 +35,16 @@ var _rig := {}
 var _walk_blend := 0.0
 var _carry_blend := 0.0
 var _lift_blend := 0.0
+## Index into CharacterCatalog.COLORS; -1 = whatever this player id picked. Shown as a
+## ring under the feet and used for this player's pings.
+var color_index := -1
+var _color_ring: MeshInstance3D
+var _ping_prev := false
+var _ping_cooldown := 0.0
+const PING_COOLDOWN := 0.8
+## How far ahead a ping lands, and how close an item must be to that spot to be pinged itself.
+const PING_REACH := 2.2
+const PING_ITEM_SNAP := 1.4
 var _idle_time := 0.0
 
 @export_group("Movement")
@@ -103,6 +113,8 @@ func _ready() -> void:
 	collision_mask = (1 << 0) | (1 << 1) | (1 << 2)  # world, players, furniture
 	_build_collision()
 	_build_visual()
+	_build_color_ring()
+	NetworkManager.ping_received.connect(_on_ping_received)
 
 
 func _build_collision() -> void:
@@ -148,6 +160,76 @@ func _build_visual() -> void:
 	nose.scale = Vector3(0.2, 0.2, 0.3)
 	nose.position = Vector3(0, 0.9, -0.45)
 	_visual.add_child(nose)
+
+
+func _build_color_ring() -> void:
+	if color_index < 0:
+		color_index = CharacterCatalog.color_index_for(player_id)
+	_color_ring = MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.5
+	torus.outer_radius = 0.62
+	_color_ring.mesh = torus
+	_color_ring.position.y = 0.04
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_color_ring.material_override = material
+	add_child(_color_ring)
+	_apply_color()
+
+
+func _apply_color() -> void:
+	((_color_ring.material_override) as StandardMaterial3D).albedo_color = CharacterCatalog.COLORS[color_index]
+
+
+func set_color_index(index: int) -> void:
+	index = CharacterCatalog.clamp_color(index)
+	if index == color_index:
+		return
+	color_index = index
+	if _color_ring:
+		_apply_color()
+
+
+## Drops a coloured marker ahead of this player, or on the item they are facing.
+func _handle_ping(delta: float) -> void:
+	_ping_cooldown = maxf(_ping_cooldown - delta, 0.0)
+	var pressed := input.ping
+	if pressed and not _ping_prev and _ping_cooldown <= 0.0 and not movement_locked:
+		_ping_cooldown = PING_COOLDOWN
+		var spot := _ping_spot()
+		_show_ping(spot)
+		NetworkManager.send_ping(player_id, spot)
+	_ping_prev = pressed
+
+
+func _ping_spot() -> Vector3:
+	var facing := Vector3.FORWARD.rotated(Vector3.UP, _visual.rotation.y if _visual else 0.0)
+	var ahead := global_position + facing * PING_REACH
+	var best: Furniture = null
+	var best_distance := PING_ITEM_SNAP
+	for item: Furniture in get_tree().get_nodes_in_group("furniture"):
+		if item.data == null:
+			continue
+		var distance := Vector2(item.global_position.x - ahead.x, item.global_position.z - ahead.z).length()
+		if distance < best_distance and absf(item.global_position.y - global_position.y) < 2.0:
+			best_distance = distance
+			best = item
+	if best != null:   # on the item's own floor spot
+		return Vector3(best.global_position.x, best.global_position.y - best.data.size.y * 0.5, best.global_position.z)
+	return Vector3(ahead.x, global_position.y, ahead.z)
+
+
+func _show_ping(spot: Vector3) -> void:
+	var scene := get_tree().current_scene
+	if scene:
+		PingMarker.spawn(scene, spot, CharacterCatalog.COLORS[color_index])
+
+
+## Another machine's player pinged: draw it here (our own players drew theirs already).
+func _on_ping_received(pinging_player_id: int, spot: Vector3) -> void:
+	if not is_local and pinging_player_id == player_id:
+		_show_ping(spot)
 
 
 ## Switches to catalogue character `index`, keeping the facing and squash state.
@@ -431,6 +513,7 @@ func _physics_process(delta: float) -> void:
 	if not is_local:
 		_follow_remote(delta)
 		return
+	_handle_ping(delta)
 	var move := Vector2.ZERO if movement_locked else input.move
 	var input_dir := Vector3(move.x, 0.0, move.y).rotated(Vector3.UP, CAMERA_YAW)
 
@@ -472,18 +555,21 @@ func _physics_process(delta: float) -> void:
 
 
 ## State to stream to other machines:
-## [id, position, velocity, facing, move, interact, character, buttons] (buttons: see
-## PlayerInput.buttons_bits). Older senders may omit the last two.
+## [id, position, velocity, facing, move, interact, character, buttons, colour] (buttons: see
+## PlayerInput.buttons_bits). Older senders may omit the last three.
 func net_state() -> Array:
 	return [player_id, global_position, velocity, _visual.rotation.y if _visual else 0.0,
-		input.move, input.interact, character, input.buttons_bits()]
+		input.move, input.interact, character, input.buttons_bits(), color_index]
 
 
 ## Remote players: remember where the owning machine says this player is, and feed
 ## its input so interact presses reach the area's zones. `velocity_` is kept so the
 ## furniture this player carries (simulated on the host) can match its speed.
 func apply_net_state(position_: Vector3, yaw: float, move: Vector2, interact: bool,
-		velocity_ := Vector3.ZERO, character_ := -1, buttons := 0) -> void:
+		velocity_ := Vector3.ZERO, character_ := -1, buttons := 0, color_ := -1) -> void:
+	if color_ >= 0:
+		CharacterCatalog.choose_color(player_id, color_)
+		set_color_index(color_)
 	if character_ >= 0:
 		CharacterCatalog.choose(player_id, character_)
 		set_character(character_)

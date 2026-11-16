@@ -65,6 +65,7 @@ class Chooser:
 	var player_id := 0
 	var label: Label3D
 	var stick_was_neutral := true
+	var stick_y_neutral := true
 	var interact_was_down := true   # the press that opened the picker must not confirm it
 
 
@@ -79,9 +80,14 @@ func _physics_process(delta: float) -> void:
 		var remembered := SaveManager.remembered_character(ordinal)
 		if remembered >= 0:   # picked on an earlier launch: no need to ask again
 			CharacterCatalog.choose(id, remembered)
+			var remembered_color := SaveManager.remembered_color(ordinal)
+			if remembered_color >= 0:
+				CharacterCatalog.choose_color(id, remembered_color)
 			var player := _find_player(id)
 			if player:
 				player.set_character(remembered)
+				if remembered_color >= 0:
+					player.set_color_index(remembered_color)
 		else:
 			_start_choosing(id)
 	_update_choosers()
@@ -126,6 +132,16 @@ func _update_choosers() -> void:
 			player.set_character(next)
 			player.pop()
 			_refresh_chooser_label(chooser, player)
+		var y := player.input.move.y
+		if absf(y) < 0.3:
+			chooser.stick_y_neutral = true
+		elif chooser.stick_y_neutral and absf(y) > 0.6:
+			chooser.stick_y_neutral = false
+			var next_color := posmod(player.color_index + (1 if y > 0.0 else -1), CharacterCatalog.color_count())
+			CharacterCatalog.choose_color(id, next_color)
+			player.set_color_index(next_color)
+			player.pop()
+			_refresh_chooser_label(chooser, player)
 		var down := player.input.interact
 		if down and not chooser.interact_was_down:
 			_finish_choosing(chooser, player)
@@ -134,7 +150,10 @@ func _update_choosers() -> void:
 
 func _finish_choosing(chooser: Chooser, player: Player) -> void:
 	CharacterCatalog.choose(chooser.player_id, player.character)   # records the pick even if untouched
-	SaveManager.remember_character(InputSetup.local_player_ids().find(chooser.player_id), player.character)
+	var ordinal := InputSetup.local_player_ids().find(chooser.player_id)
+	SaveManager.remember_character(ordinal, player.character)
+	CharacterCatalog.choose_color(chooser.player_id, player.color_index)
+	SaveManager.remember_color(ordinal, player.color_index)
 	player.movement_locked = false
 	player.pop()
 	chooser.label.queue_free()
@@ -142,7 +161,9 @@ func _finish_choosing(chooser: Chooser, player: Player) -> void:
 
 
 func _refresh_chooser_label(chooser: Chooser, player: Player) -> void:
-	chooser.label.text = "< %s >\nLeft / Right to choose\nInteract to confirm" % CharacterCatalog.character_name(player.character)
+	chooser.label.text = "< %s >\nColour: %s\nLeft / Right: animal   Up / Down: colour\nInteract to confirm" % [
+		CharacterCatalog.character_name(player.character), CharacterCatalog.COLOR_NAMES[player.color_index]]
+	chooser.label.modulate = Color.WHITE.lerp(CharacterCatalog.COLORS[player.color_index], 0.55)
 
 
 func _process(delta: float) -> void:
