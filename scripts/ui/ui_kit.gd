@@ -84,6 +84,16 @@ static func label(text: String, size: int = FONT_BODY,
 	return l
 
 
+## A small wooden tag (a modifier name, a status). `color` tints the text.
+static func chip(text: String, color: Color = PINK) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = &"ButtonPanel"
+	var l := label(text, FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER)
+	l.add_theme_color_override("font_color", color)
+	panel.add_child(l)
+	return panel
+
+
 static func main_font() -> Font:
 	if _main_font == null:
 		_main_font = load(MAIN_FONT_PATH)
@@ -139,7 +149,14 @@ static func theme() -> Theme:
 	_variation(t, "ButtonPanel", "PanelContainer",
 		_box("Buttons/Square/SquareButton2_wood.png", Vector4(70, 60, 70, 75), Vector4(80, 26, 80, 46)))
 
-	# Buttons (not used by the couch-co-op screens yet, ready for menus).
+	# Dividers (the briefing's letter header): a soft cream rule instead of the default grey.
+	var rule := StyleBoxLine.new()
+	rule.color = Color(CREAM, 0.45)
+	rule.thickness = 4
+	t.set_stylebox("separator", "HSeparator", rule)
+	t.set_constant("separation", "HSeparator", 28)
+
+	# Buttons.
 	var button_margins := Vector4(70, 60, 70, 75)
 	var button_pad := Vector4(80, 26, 80, 46)
 	t.set_stylebox("normal", "Button", _box("Buttons/Square/SquareButton2_wood.png", button_margins, button_pad))
@@ -159,6 +176,7 @@ static func theme() -> Theme:
 	t.set_color("font_outline_color", "Button", BROWN_DARK)
 	t.set_constant("outline_size", "Button", 12)
 	t.set_font_size("font_size", "Button", FONT_BODY)
+	t.set_constant("line_spacing", "Button", 6)
 
 	# Text fields (the host address box): a cream note with a brown edge.
 	var field := StyleBoxFlat.new()

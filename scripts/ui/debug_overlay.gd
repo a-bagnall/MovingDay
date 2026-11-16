@@ -5,30 +5,43 @@ class_name DebugOverlay
 ## item's damage limit. If "last hit" never changes when you bump things, the
 ## physics engine is not reporting contact impulses and damage will not work.
 
+var _panel: PanelContainer
 var _label: Label
 
 
 func _ready() -> void:
 	layer = 100
+	# A translucent backing panel keeps the text readable over any room.
+	_panel = PanelContainer.new()
+	_panel.position = Vector2(12, 90)
+	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var back := StyleBoxFlat.new()
+	back.bg_color = Color(0.0, 0.0, 0.0, 0.62)
+	back.set_corner_radius_all(8)
+	back.set_content_margin_all(10)
+	_panel.add_theme_stylebox_override("panel", back)
+	add_child(_panel)
 	_label = Label.new()
-	_label.position = Vector2(16, 90)
-	_label.add_theme_font_size_override("font_size", 15)
-	_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_label.add_theme_constant_override("outline_size", 5)
-	add_child(_label)
-	_label.visible = false
+	_label.add_theme_font_size_override("font_size", 16)
+	_panel.add_child(_label)
+	_panel.visible = false
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key and key.pressed and not key.echo and key.keycode == KEY_F3:
-		_label.visible = not _label.visible
+		_panel.visible = not _panel.visible
 
 
 func _process(_delta: float) -> void:
-	if not _label.visible:
+	if not _panel.visible:
 		return
 	var lines: PackedStringArray = ["F3 debug", ""]
+	if SaveManager.run != null:
+		lines.append("Run: day %d  wallet $%d  modifiers: %s" % [
+			SaveManager.run.day, roundi(SaveManager.run.wallet),
+			RunModifiers.names(SaveManager.run.modifiers) if not SaveManager.run.modifiers.is_empty() else "none"])
+		lines.append("")
 
 	for node in get_tree().get_nodes_in_group("players"):
 		var p := node as Player

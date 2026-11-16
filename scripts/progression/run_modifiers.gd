@@ -1,8 +1,10 @@
 class_name RunModifiers
-## "Choose one" run modifiers: every few days the team picks one of three, and it stays
-## for the rest of the run. Each one makes the run harder in its own way. They are
-## stored on RunState (`modifiers`, as ids), so they save, resume and mirror to clients
-## like the rest of the run.
+## "Pick One" run modifiers: every few days the team picks one of three, and it stays
+## for the rest of the run. Each one is a detriment that adds chaos in its own way.
+## Perks (the helpful kind) are a separate future system and are never listed here.
+##
+## Modifiers are stored on RunState (`modifiers`, as ids), so they save, resume and
+## mirror to clients like the rest of the run.
 ##
 ## Effects are looked up here by whoever needs them (Furniture, Player, StickyLinks...),
 ## so adding a modifier means one entry below and one multiplier function.
@@ -13,22 +15,27 @@ const OFFER_SIZE := 3
 
 const ENTRIES := {
 	"butterfingers": {
+		"tag": "GRIP",
 		"name": "Butterfingers",
 		"description": "Grip drains 40% faster when you carry.",
 	},
 	"slippery_soles": {
+		"tag": "MOVEMENT",
 		"name": "Slippery Soles",
 		"description": "Everyone speeds up and stops 35% more slowly.",
 	},
 	"glass_cargo": {
+		"tag": "DAMAGE",
 		"name": "Glass Cargo",
 		"description": "Everything breaks 40% more easily.",
 	},
 	"heavy_lifting": {
+		"tag": "WEIGHT",
 		"name": "Heavy Lifting",
 		"description": "All furniture is 25% heavier.",
 	},
 	"extra_gum": {
+		"tag": "STICKY",
 		"name": "Gum Everywhere",
 		"description": "One extra pair of items is stuck together, even before day 3.",
 	},
@@ -47,6 +54,15 @@ static func has(id: String) -> bool:
 
 static func modifier_name(id: String) -> String:
 	return ENTRIES[id]["name"] if ENTRIES.has(id) else id
+
+
+## Short category shown on the pick card (GRIP, DAMAGE...).
+static func tag(id: String) -> String:
+	return ENTRIES[id]["tag"] if ENTRIES.has(id) else "?"
+
+
+static func description(id: String) -> String:
+	return ENTRIES[id]["description"] if ENTRIES.has(id) else ""
 
 
 static func names(ids: Array[String]) -> String:

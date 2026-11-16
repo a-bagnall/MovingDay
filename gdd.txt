@@ -326,8 +326,8 @@ Sticky Objects (implemented)
 - From day 3 onwards, some objects in a job are stuck together in pairs, drawn with a pink gum blob.
 - One pair from day 3, one more every 5 days after that, up to 3. Pairs are always light enough for a team to move.
 - This creates a geometric challenge: players must move connected objects as a combined shape.
-Run Modifiers: "Choose One" (implemented)
-- Every n days (currently 3, at the hub visit) the host chooses one modifier from three, similar to PlateUp!.
+Run Modifiers: "Pick One" (implemented)
+- Every n days (currently 3, at the hub visit) the host picks one modifier from three (shown side by side on a "Pick One" card), similar to PlateUp!.
 - Modifiers are detriments, not rewards: each adds chaos for the rest of that run (butterfingers, slippery soles, glass cargo, heavy lifting, extra gum...).
 - They are intended to be an eventual run killer. The run slot's details card and the hub list the ones in play.
 Perks (planned, a separate system from modifiers)

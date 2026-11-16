@@ -8,6 +8,7 @@ signal contract_finished(result: Dictionary)
 const PAR_TIME := 120.0        ## Seconds under which a time bonus is earned.
 const TIME_BONUS_RATE := 2.0   ## Dollars per second under par.
 const FIRST_DAY_DEBUG_ITEM := "Box"
+const LOW_TIME_WARNING := 60.0   ## The day clock turns pink under this many seconds.
 
 var zone: DeliveryZone
 var required: Array[Furniture] = []
@@ -73,6 +74,16 @@ func _build_ui() -> void:
 	_time_value = _add_chip(bar, "JOB TIME")
 	_day_value = _add_chip(bar, "DAY LEFT")
 
+	# Active modifiers stay on screen as small tags, so a bad run is never a mystery.
+	var run := SaveManager.run
+	if run != null and not run.modifiers.is_empty():
+		var tags := HBoxContainer.new()
+		tags.add_theme_constant_override("separation", 16)
+		tags.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		for id in run.modifiers:
+			tags.add_child(UIKit.chip(RunModifiers.modifier_name(id)))
+		column.add_child(tags)
+
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -87,13 +98,10 @@ func _build_ui() -> void:
 	column.add_child(hint)
 
 
-## The bottom note: the grab prompt, then anything unusual about this job (the run's
-## modifiers and how many pairs of items are stuck together).
+## The bottom note: the grab prompt, then how many pairs of items are stuck together.
+## (The run's modifiers are the tags under the top bar.)
 func _refresh_hint() -> void:
 	var text := "Grab / drop: %s" % UIKit.INTERACT_KEYS
-	var run := SaveManager.run
-	if run != null and not run.modifiers.is_empty():
-		text += "\nModifiers: %s" % RunModifiers.names(run.modifiers)
 	var sticky := get_tree().get_first_node_in_group("sticky_links") as StickyLinks if is_inside_tree() else null
 	if sticky != null and sticky.pairs_made > 0:
 		text += "\nStuck together: %d pair%s (look for the pink gum)" % [sticky.pairs_made, "" if sticky.pairs_made == 1 else "s"]
@@ -127,6 +135,8 @@ func _process(delta: float) -> void:
 	_damage_value.text = UIKit.money(damage)
 	_time_value.text = UIKit.format_time(elapsed)
 	_day_value.text = UIKit.format_time(GameFlow.day_time_remaining)
+	_day_value.add_theme_color_override("font_color",
+		UIKit.PINK if GameFlow.day_time_remaining < LOW_TIME_WARNING else UIKit.CREAM)
 	_damage_value.add_theme_color_override("font_color",
 		UIKit.PINK if damage > 0.5 else UIKit.CREAM)
 

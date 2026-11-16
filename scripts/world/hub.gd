@@ -69,7 +69,7 @@ func _on_modifier_chosen(id: String) -> void:
 	SaveManager.run.modifiers.append(id)
 	SaveManager.run.modifier_day = SaveManager.run.day
 	_choosing = false
-	_set_notice("%s is now part of this run" % RunModifiers.modifier_name(id))
+	_set_notice("%s is in for the rest of this run" % RunModifiers.modifier_name(id))
 	GameFlow.sync_run()
 
 
@@ -91,12 +91,12 @@ func _process(delta: float) -> void:
 
 	_truck_pad.set_text(_pad_text() if _countdown < 0.0 else "Starting in %d" % ceili(_countdown))
 	_notice_time = maxf(0.0, _notice_time - delta)
-	var status_text := "Day %d   Wallet %s\nBuy a boost or outfit, then all players stand on the truck pad" % [
+	var status_text := "DAY %d  |  WALLET %s\nBuy a boost or outfit, then all players stand on the truck pad" % [
 		SaveManager.run.day, UIKit.money(SaveManager.run.wallet)]
 	if not SaveManager.run.modifiers.is_empty():
 		status_text += "\nModifiers: " + RunModifiers.names(SaveManager.run.modifiers)
 	if waiting_for_choice and not _choosing:
-		status_text += "\nWaiting for the host to choose a modifier"
+		status_text += "\nThe host is picking a modifier..."
 	if _notice_time > 0.0:
 		status_text += "\n" + _notice
 	_status.text = status_text
