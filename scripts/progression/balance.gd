@@ -115,6 +115,17 @@ const THROW_ARC := 0.45
 const THROW_COOLDOWN := 0.6
 
 
+# --- Heave-ho (two carriers press the Heave button together) -----------------------------
+
+## Both carriers must press within this many seconds of each other.
+const HEAVE_WINDOW := 0.35
+## The burst: the team moves this much faster for this long, and its grip is restored.
+const HEAVE_SPEED_BOOST := 1.35
+const HEAVE_DURATION := 1.2
+## Seconds before the same item can be heaved again.
+const HEAVE_COOLDOWN := 4.0
+
+
 # --- Sticky pairs ---------------------------------------------------------------------
 
 const STICKY_FIRST_DAY := 3

@@ -620,6 +620,7 @@ func _poll_input() -> void:
 	input.lift = InputSetup.is_button_pressed(_source, "lift")
 	input.action = InputSetup.is_button_pressed(_source, "action")
 	input.ping = InputSetup.is_button_pressed(_source, "ping")
+	input.heave = InputSetup.is_button_pressed(_source, "heave")
 
 
 func _physics_process(delta: float) -> void:

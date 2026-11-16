@@ -24,6 +24,7 @@ const PAPER_FONT_PATH := "res://assets/fonts/XTypewriter_Font_0_96/TrueType (.tt
 const INTERACT_KEYS := "E, Enter or gamepad A"
 const LIFT_KEYS := "Q, Right Shift or the left trigger"
 const ACTION_KEYS := "R, Right Ctrl or gamepad X"
+const HEAVE_KEYS := "Space, . or gamepad B"
 
 const CREAM := Color("fffbe8")
 const BROWN := Color("9a5444")

@@ -13,13 +13,16 @@ var lift := false
 ## Action and Ping buttons, held (a press is a change from false to true).
 var action := false
 var ping := false
+## Heave-ho: pressed together with a carrying partner.
+var heave := false
 
-## The three extra buttons as bits, for the network: 1 lift, 2 action, 4 ping.
+## The three extra buttons as bits, for the network: 1 lift, 2 action, 4 ping, 8 heave.
 func buttons_bits() -> int:
-	return (1 if lift else 0) | (2 if action else 0) | (4 if ping else 0)
+	return (1 if lift else 0) | (2 if action else 0) | (4 if ping else 0) | (8 if heave else 0)
 
 
 func set_buttons_bits(bits: int) -> void:
 	lift = bits & 1 != 0
 	action = bits & 2 != 0
 	ping = bits & 4 != 0
+	heave = bits & 8 != 0

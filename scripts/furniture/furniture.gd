@@ -20,6 +20,13 @@ var is_puppet := false
 var net_id := -1
 ## The speed multiplier the host gave this item's holders; sent so clients can apply it.
 var net_speed_mult := 1.0
+## Heave-ho state. `heave_count` goes up on every heave so other machines can show it.
+var heave_count := 0
+var _last_heave_count := -1   # puppet: the count last seen (-1 until the first state)
+var _heave_pressed := {}   # Player -> when (seconds) it last pressed Heave
+var _heave_prev := {}      # Player -> whether Heave was down last frame
+var _heave_cooldown := 0.0
+var _heave_left := 0.0
 
 const GRIP_REACH := 0.65      ## Distance from the furniture end to where a player stands.
 const MAX_CARRY_ACCEL := 45.0
@@ -373,12 +380,17 @@ func _spawn_dust(strength: float) -> void:
 
 
 func _show_damage_popup(amount: float) -> void:
+	_show_popup("IMPACT  -$%d" % maxi(roundi(amount), 1), Color(1.0, 0.3, 0.3))
+
+
+## A short rising label over the item.
+func _show_popup(text: String, color: Color) -> void:
 	var parent := get_parent()
 	if parent == null:
 		return
 	var label := Label3D.new()
-	label.text = "IMPACT  -$%d" % maxi(roundi(amount), 1)
-	label.modulate = Color(1.0, 0.3, 0.3)
+	label.text = text
+	label.modulate = color
 	label.outline_size = 10
 	UIKit.style_label3d(label)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -411,6 +423,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var holder_count := _holders.size()
+	_update_heave(delta)
 	var lift := clampf(float(holder_count) / float(_players_needed()), 0.0, 1.0)
 	gravity_scale = lerpf(1.0, HOLD_GRAVITY_SCALE, lift)
 
@@ -514,6 +527,38 @@ func _update_grip(delta: float, strain: float) -> bool:
 	return _grip_strength <= 0.0
 
 
+## Heave-ho: when everyone carrying a two-person item presses Heave within a third of a
+## second, the team gets a burst of speed and a fresh grip.
+func _update_heave(delta: float) -> void:
+	_heave_cooldown = maxf(_heave_cooldown - delta, 0.0)
+	_heave_left = maxf(_heave_left - delta, 0.0)
+	var now := Time.get_ticks_msec() / 1000.0
+	for p: Player in _holders.values():
+		var down := p.input.heave
+		if down and not _heave_prev.get(p, false):
+			_heave_pressed[p] = now
+		_heave_prev[p] = down
+	if _heave_cooldown > 0.0 or _players_needed() < 2 or _holders.size() < _players_needed():
+		return
+	for p: Player in _holders.values():
+		if now - float(_heave_pressed.get(p, -99.0)) > Balance.HEAVE_WINDOW:
+			return
+	_heave_pressed.clear()
+	_heave_cooldown = Balance.HEAVE_COOLDOWN
+	_heave_left = Balance.HEAVE_DURATION
+	_grip_strength = 1.0
+	_grip_grace = maxf(_grip_grace, 0.5)
+	heave_count += 1
+	_celebrate_heave()
+
+
+func _celebrate_heave() -> void:
+	_show_popup("HEAVE-HO!", Color(1.0, 0.9, 0.4))
+	_pop(1.2)
+	for p: Player in _holders.values():
+		p.pop()
+
+
 func _update_player_speed(lift: float, strain: float) -> void:
 	# Carrying anything slows you; weight slows you further. A full team is much
 	# faster than a lone player, because the weight is shared.
@@ -526,6 +571,8 @@ func _update_player_speed(lift: float, strain: float) -> void:
 	if data.players_required >= 2 and NetworkManager.is_solo():
 		mult = Balance.SOLO_HEAVY_SPEED   # a whole two-person item on one back
 	mult *= clampf(1.0 - maxf(strain - 0.8, 0.0) / 2.5, 0.25, 1.0)
+	if _heave_left > 0.0:
+		mult *= Balance.HEAVE_SPEED_BOOST
 	net_speed_mult = mult
 	for player in _holders.values():
 		(player as Player).speed_multiplier = mult
@@ -572,7 +619,7 @@ func net_state() -> Array:
 			holders.append([i, (holder as Player).player_id])
 	return [net_id, global_position, global_transform.basis.get_rotation_quaternion(),
 		linear_velocity, angular_velocity, holders, net_speed_mult, grip_percent(),
-		total_damage, is_delivered]
+		total_damage, is_delivered, heave_count]
 
 
 ## Client: takes the host's state. `players` maps player id -> Player on this machine.
@@ -595,6 +642,11 @@ func net_apply_state(state: Array, players: Dictionary) -> void:
 	_net_set_holders(holders)
 	_grip_strength = float(state[7]) / 100.0
 	_net_take_damage(float(state[8]))
+	if state.size() > 10:
+		var count := int(state[10])
+		if _last_heave_count >= 0 and count > _last_heave_count:
+			_celebrate_heave()   # the host heaved: show it here too
+		_last_heave_count = count
 	if state[9]:
 		deliver()
 

@@ -10,20 +10,20 @@ const MAX_PLAYERS := 4
 const JOY_DEADZONE := 0.2
 
 ## Buttons beyond movement and interact. Lift is held; Action and Ping are pressed.
-const BUTTONS := ["lift", "action", "ping"]
+const BUTTONS := ["lift", "action", "ping", "heave"]
 ## How far a gamepad trigger must be pulled to count as pressed.
 const TRIGGER_PRESSED := 0.5
 
-const ACTIONS := ["up", "down", "left", "right", "interact", "lift", "action", "ping"]
+const ACTIONS := ["up", "down", "left", "right", "interact", "lift", "action", "ping", "heave"]
 
 const KEYS := {
 	KB_WASD: {
 		"up": KEY_W, "down": KEY_S, "left": KEY_A, "right": KEY_D,
-		"interact": KEY_E, "lift": KEY_Q, "action": KEY_R, "ping": KEY_F,
+		"interact": KEY_E, "lift": KEY_Q, "action": KEY_R, "ping": KEY_F, "heave": KEY_SPACE,
 	},
 	KB_ARROWS: {
 		"up": KEY_UP, "down": KEY_DOWN, "left": KEY_LEFT, "right": KEY_RIGHT,
-		"interact": KEY_ENTER, "lift": KEY_SHIFT, "action": KEY_CTRL, "ping": KEY_SLASH,
+		"interact": KEY_ENTER, "lift": KEY_SHIFT, "action": KEY_CTRL, "ping": KEY_SLASH, "heave": KEY_PERIOD,
 	},
 }
 
@@ -61,9 +61,9 @@ func available_sources() -> Array[int]:
 func describe(source: int) -> String:
 	match source:
 		KB_WASD:
-			return "Keyboard (WASD + E, Q lift, R action, F ping)"
+			return "Keyboard (WASD + E, Q lift, R action, F ping, Space heave-ho)"
 		KB_ARROWS:
-			return "Keyboard (Arrows + Enter, R-Shift lift, R-Ctrl action, / ping)"
+			return "Keyboard (Arrows + Enter, R-Shift lift, R-Ctrl action, / ping, . heave-ho)"
 		_:
 			return "%s (A)" % Input.get_joy_name(source)
 
@@ -142,8 +142,8 @@ func is_interact_pressed(source: int) -> bool:
 	return Input.is_joy_button_pressed(source, JOY_BUTTON_A)
 
 
-## Whether `button` ("lift", "action" or "ping") is held for `source`. Gamepad: left trigger
-## is lift, X is action, Y is ping.
+## Whether `button` ("lift", "action", "ping" or "heave") is held for `source`. Gamepad: left
+## trigger is lift, X is action, Y is ping, B is heave-ho.
 func is_button_pressed(source: int, button: String) -> bool:
 	if source < 0:
 		if ui_captured:
@@ -156,6 +156,8 @@ func is_button_pressed(source: int, button: String) -> bool:
 			return Input.is_joy_button_pressed(source, JOY_BUTTON_X)
 		"ping":
 			return Input.is_joy_button_pressed(source, JOY_BUTTON_Y)
+		"heave":
+			return Input.is_joy_button_pressed(source, JOY_BUTTON_B)
 	return false
 
 

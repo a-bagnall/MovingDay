@@ -103,6 +103,7 @@ func _build_ui() -> void:
 func _refresh_hint() -> void:
 	var text := "Grab / drop: %s\nHold %s to lift\nShove (hands free), or hold and release %s to throw a light item" % [
 		UIKit.INTERACT_KEYS, UIKit.LIFT_KEYS, UIKit.ACTION_KEYS]
+	text += "\nTwo of you carrying: press %s together for a heave-ho" % UIKit.HEAVE_KEYS
 	var sticky := get_tree().get_first_node_in_group("sticky_links") as StickyLinks if is_inside_tree() else null
 	if sticky != null and sticky.pairs_made > 0:
 		text += "\nStuck together: %d pair%s (look for the pink gum)" % [sticky.pairs_made, "" if sticky.pairs_made == 1 else "s"]
