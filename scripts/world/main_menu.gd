@@ -71,8 +71,18 @@ class Chooser:
 func _physics_process(delta: float) -> void:
 	super(delta)
 	# A player who has just arrived (and has not chosen before) picks right away.
-	for id in InputSetup.local_player_ids():
-		if not CharacterCatalog.choices.has(id) and not _choosers.has(id):
+	var ids := InputSetup.local_player_ids()
+	for ordinal in ids.size():
+		var id: int = ids[ordinal]
+		if CharacterCatalog.choices.has(id) or _choosers.has(id):
+			continue
+		var remembered := SaveManager.remembered_character(ordinal)
+		if remembered >= 0:   # picked on an earlier launch: no need to ask again
+			CharacterCatalog.choose(id, remembered)
+			var player := _find_player(id)
+			if player:
+				player.set_character(remembered)
+		else:
 			_start_choosing(id)
 	_update_choosers()
 
@@ -124,6 +134,7 @@ func _update_choosers() -> void:
 
 func _finish_choosing(chooser: Chooser, player: Player) -> void:
 	CharacterCatalog.choose(chooser.player_id, player.character)   # records the pick even if untouched
+	SaveManager.remember_character(InputSetup.local_player_ids().find(chooser.player_id), player.character)
 	player.movement_locked = false
 	player.pop()
 	chooser.label.queue_free()

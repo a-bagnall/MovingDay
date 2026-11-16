@@ -11,6 +11,9 @@ const VERSION := 1
 var unlocks: Array[String] = []
 var cosmetics: Array[String] = []
 var equipped_outfit := ""
+## Preferred character (CharacterCatalog index) for the 1st, 2nd... player on this
+## computer, so a pick is remembered next launch. Optional in the file.
+var characters: Array[int] = []
 
 
 func to_dict() -> Dictionary:
@@ -19,6 +22,7 @@ func to_dict() -> Dictionary:
 		"unlocks": unlocks.duplicate(),
 		"cosmetics": cosmetics.duplicate(),
 		"equipped_outfit": equipped_outfit,
+		"characters": characters.duplicate(),
 	}
 
 
@@ -39,6 +43,11 @@ static func from_dict(data: Dictionary) -> ProfileState:
 		push_error("ProfileState: 'equipped_outfit' is not a string")
 		return null
 	state.equipped_outfit = equipped
+	var saved_characters: Variant = data.get("characters", [])
+	if typeof(saved_characters) == TYPE_ARRAY:   # lenient: older files have none, bad entries are skipped
+		for entry in saved_characters:
+			if typeof(entry) in [TYPE_INT, TYPE_FLOAT]:
+				state.characters.append(int(entry))
 	if state.equipped_outfit != "" and not state.cosmetics.has(state.equipped_outfit):
 		push_error("ProfileState: equipped outfit is not owned")
 		return null

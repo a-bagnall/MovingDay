@@ -375,7 +375,7 @@ func _animate_character(delta: float) -> void:
 	for key in ["LArm1", "RArm1"]:
 		if not _rig.has(key):
 			continue
-		var is_left := key == "LArm1"
+		var is_left: bool = key == "LArm1"
 		var side: float = _rig[key]["side"]
 		var phase := swing if (in_sync or not is_left) else -swing
 		var idle_sway := sin(_idle_time * 1.7 + (0.0 if is_left else 1.4)) * 0.07 * idle

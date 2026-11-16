@@ -150,6 +150,27 @@ func _write_run() -> void:
 	_write_json(_slot_path(run.slot), run.to_dict())
 
 
+## Remembers the character the `ordinal`-th player on this computer picked. Written
+## straight away (it is this computer's own preference, even while mirroring a host's run).
+func remember_character(ordinal: int, character: int) -> void:
+	if ordinal < 0 or ordinal >= InputSetup.MAX_PLAYERS:
+		return
+	while profile.characters.size() <= ordinal:
+		profile.characters.append(-1)
+	if profile.characters[ordinal] == character:
+		return
+	profile.characters[ordinal] = character
+	_write_json(PROFILE_PATH, profile.to_dict())
+
+
+## The remembered character for the `ordinal`-th local player, or -1.
+func remembered_character(ordinal: int) -> int:
+	if ordinal < 0 or ordinal >= profile.characters.size():
+		return -1
+	var value := profile.characters[ordinal]
+	return value if value >= 0 and value < CharacterCatalog.count() else -1
+
+
 func _write_profile() -> void:
 	if is_mirror:
 		return
