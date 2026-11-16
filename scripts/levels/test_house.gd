@@ -75,6 +75,9 @@ func _ready() -> void:
 		_spawn_player(player_id, false)
 	SaveManager.begin_day()
 	_start_job(zone, items)   # trims `items` to the job's furniture before it first waits
+	var sticky := StickyLinks.new()
+	add_child(sticky)
+	sticky.setup(items, SaveManager.run.day, SaveManager.run.slot)   # day 3+: some items are stuck together
 	if NetworkManager.is_online():
 		var sync := JobSync.new()
 		sync.name = "JobSync"
