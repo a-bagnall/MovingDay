@@ -8,11 +8,11 @@ class_name CharacterCatalog
 ## forward, -Z. If one looks backwards in game, change only its `yaw`.
 
 const ENTRIES: Array[Dictionary] = [
-	{"name": "Bear", "path": "res://assets/characters/Animal Plushies/FBX/Bear.fbx", "height": 0.85, "yaw": PI},
-	{"name": "Bunny", "path": "res://assets/characters/Animal Plushies/FBX/Bunny.fbx", "height": 0.95, "yaw": PI},
-	{"name": "Cat", "path": "res://assets/characters/Animal Plushies/FBX/Cat.fbx", "height": 0.9, "yaw": PI},
-	{"name": "Dog", "path": "res://assets/characters/Animal Plushies/FBX/Dog.fbx", "height": 0.9, "yaw": PI},
-	{"name": "Robot", "path": "res://assets/characters/Animated Robot by Quaternius/FBX/Robot.fbx", "height": 1.0, "yaw": PI},
+	{"name": "Bear", "path": "res://assets/characters/Animal Plushies/FBX/Bear.fbx", "height": 0.72, "yaw": PI},
+	{"name": "Bunny", "path": "res://assets/characters/Animal Plushies/FBX/Bunny.fbx", "height": 0.82, "yaw": PI},
+	{"name": "Cat", "path": "res://assets/characters/Animal Plushies/FBX/Cat.fbx", "height": 0.77, "yaw": PI},
+	{"name": "Dog", "path": "res://assets/characters/Animal Plushies/FBX/Dog.fbx", "height": 0.77, "yaw": PI},
+	{"name": "Robot", "path": "res://assets/characters/Animated Robot by Quaternius/FBX/Robot.fbx", "height": 1.2, "yaw": PI},
 ]
 
 ## player id -> index into ENTRIES, for the players on every machine in the session.

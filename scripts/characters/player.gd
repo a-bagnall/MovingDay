@@ -26,6 +26,10 @@ var _anim_walk: StringName = &""
 var _anim_current: StringName = &""
 var _anim_time := 0.0
 var _anim_lean := 0.0
+var _anim_bank := 0.0
+var _prev_velocity := Vector3.ZERO
+var _fidget_cooldown := 4.0
+var _fidget_left := 0.0
 var _skeleton: Skeleton3D
 var _rig := {}
 var _walk_blend := 0.0
@@ -285,10 +289,34 @@ func _animate_character(delta: float) -> void:
 	var squash := 1.0 + (hop - 0.45) * 0.16 * w
 	squash += sin(_idle_time * 2.2) * 0.02 * (1.0 - w)     # breathing
 	var roll := sin(_anim_time) * 0.16 * w                 # waddle
-	var lean := lerpf(_anim_lean, 0.14 if moving else 0.0, 1.0 - exp(-8.0 * delta))
-	_anim_lean = lean
+
+	# Lean into speeding up and braking, and bank into turns, from how the velocity changed.
+	var vel := Vector3(velocity.x, 0.0, velocity.z)
+	var accel := (vel - _prev_velocity) / maxf(delta, 0.0001)
+	_prev_velocity = vel
+	var facing := Vector3.FORWARD.rotated(Vector3.UP, _visual.rotation.y)
+	var side_dir := facing.cross(Vector3.UP)
+	var lean_target := clampf(accel.dot(facing) * 0.012, -0.22, 0.22) + (0.1 if moving else 0.0)
+	var bank_target := clampf(accel.dot(side_dir) * 0.012, -0.2, 0.2)
+	_anim_lean = lerpf(_anim_lean, lean_target, 1.0 - exp(-9.0 * delta))
+	_anim_bank = lerpf(_anim_bank, bank_target, 1.0 - exp(-9.0 * delta))
+
+	# A happy fidget now and then when standing around: a quick wiggle and a hop.
+	_fidget_cooldown -= delta
+	if _fidget_cooldown <= 0.0:
+		_fidget_cooldown = randf_range(5.0, 9.0)
+		if w < 0.05 and held_furniture == null:
+			_fidget_left = 0.7
+	var fidget := 0.0
+	if _fidget_left > 0.0:
+		_fidget_left = maxf(_fidget_left - delta, 0.0)
+		var t := 1.0 - _fidget_left / 0.7
+		fidget = sin(t * PI)                      # eases in and out
+		roll += sin(t * 28.0) * 0.14 * fidget
+		bob += absf(sin(t * 14.0)) * 0.07 * fidget
+		squash += (absf(sin(t * 14.0)) - 0.5) * 0.08 * fidget
 	_char_root.position.y = bob
-	_char_root.rotation = Vector3(-lean, _char_yaw, roll)
+	_char_root.rotation = Vector3(-_anim_lean, _char_yaw, roll + _anim_bank)
 	var wide := 1.0 / sqrt(squash)
 	_char_root.scale = Vector3(wide, squash, wide)
 
