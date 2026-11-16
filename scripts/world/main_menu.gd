@@ -22,6 +22,8 @@ const NOTICE_TIME := 4.0
 var _held: Dictionary[int, float] = {}
 var _status: Label
 var _online_menu: OnlineMenu
+var _run_panel: RunPanel
+var _slot_zones: Dictionary[int, InteractZone] = {}
 var _notice := ""
 var _notice_time := 0.0
 
@@ -38,12 +40,17 @@ func _ready() -> void:
 		var x := (slot - (SaveManager.SLOT_COUNT + 1) * 0.5) * SLOT_SPACING
 		var zone := add_zone(Vector3(x, 0.0, SLOT_Z), PAD_SIZE, SLOT_COLOR, _slot_text(slot))
 		zone.interacted.connect(_on_slot_interacted.bind(slot))
+		_slot_zones[slot] = zone
 	add_zone(Vector3(7.0, 0.0, 2.5), PAD_SIZE, PLACEHOLDER_COLOR, "Wardrobe\nComing soon")
 	var online := add_zone(Vector3(-7.0, 0.0, 2.5), PAD_SIZE, ONLINE_COLOR, "Online\nHost or join", true)
 	online.interacted.connect(_on_online_interacted)
 
 	_online_menu = OnlineMenu.new()
 	add_child(_online_menu)
+	_run_panel = RunPanel.new()
+	_run_panel.continue_requested.connect(_start_run)
+	_run_panel.deleted.connect(func(slot: int) -> void: _slot_zones[slot].set_text(_slot_text(slot)))
+	add_child(_run_panel)
 
 
 func _spawn_point(player_id: int) -> Vector3:
@@ -52,7 +59,7 @@ func _spawn_point(player_id: int) -> Vector3:
 
 func _process(delta: float) -> void:
 	_notice_time = maxf(_notice_time - delta, 0.0)
-	if not _online_menu.visible:   # typing an address must not also join players
+	if not _online_menu.visible and not _run_panel.is_open():   # typing, or a card on screen, must not also join players
 		_poll_joins(delta)
 	_update_text()
 
@@ -64,7 +71,19 @@ func _slot_text(slot: int) -> String:
 	return "Slot %d\nDay %d  %s" % [slot, state.day, UIKit.money(state.wallet)]
 
 
-func _on_slot_interacted(_player_id: int, slot: int) -> void:
+## An empty slot starts a new run. A saved one opens its details card (continue or
+## delete). Only a player on this machine can do either, so someone is here to answer;
+## online the host's machine chooses the run.
+func _on_slot_interacted(player_id: int, slot: int) -> void:
+	if _run_panel.is_open() or not InputSetup.local_player_ids().has(player_id):
+		return
+	if SaveManager.has_run(slot):
+		_run_panel.open(slot)
+	else:
+		_start_run(slot)
+
+
+func _start_run(slot: int) -> void:
 	if SaveManager.has_run(slot):
 		GameFlow.continue_run(slot)
 	else:

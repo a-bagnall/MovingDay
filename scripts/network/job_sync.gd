@@ -48,6 +48,22 @@ func _ready() -> void:
 		GameFlow.report_scene_ready()   # the host starts sending once it knows we are here
 
 
+## NetworkManager outlives the job scene. Stop listening once this node leaves the tree: a
+## message arriving before it is freed would otherwise find get_tree() null.
+func _exit_tree() -> void:
+	_disconnect(NetworkManager.roster_changed, _drop_departed_players)
+	_disconnect(NetworkManager.player_states_received, _on_player_states_received)
+	_disconnect(NetworkManager.interact_requested, _on_interact_requested)
+	_disconnect(NetworkManager.pushes_received, _on_pushes_received)
+	_disconnect(NetworkManager.job_state_received, _on_job_state_received)
+	_disconnect(NetworkManager.stumble_received, _on_stumble_received)
+
+
+func _disconnect(source: Signal, target: Callable) -> void:
+	if source.is_connected(target):
+		source.disconnect(target)
+
+
 func _physics_process(delta: float) -> void:
 	if not NetworkManager.is_online():
 		return

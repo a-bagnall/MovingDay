@@ -271,7 +271,11 @@ func _client_scene_ready(serial: int) -> void:
 ## Client -> host: "someone here pressed continue on the briefing".
 @rpc("any_peer", "call_remote", "reliable")
 func _request_continue(serial: int) -> void:
-	if NetworkManager.is_host() and serial == scene_serial and get_tree().current_scene is Briefing:
+	# Compared by scene path, not by the Briefing class: Briefing uses GameFlow, so naming the
+	# class here makes the two scripts depend on each other and neither compiles.
+	var scene := get_tree().current_scene
+	if NetworkManager.is_host() and serial == scene_serial and scene != null \
+			and scene.scene_file_path == BRIEFING_SCENE:
 		continue_from_briefing()
 
 

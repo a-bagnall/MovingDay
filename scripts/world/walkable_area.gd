@@ -38,6 +38,13 @@ func _ready() -> void:
 	reconcile_players()
 
 
+## NetworkManager outlives this room. Stop listening once the room leaves the tree: a
+## message arriving before the room is freed would otherwise find get_tree() null.
+func _exit_tree() -> void:
+	NetworkManager.roster_changed.disconnect(reconcile_players)
+	NetworkManager.player_states_received.disconnect(_on_player_states_received)
+
+
 func _physics_process(delta: float) -> void:
 	_poll_zone_presses()
 	_stream_local_players(delta)

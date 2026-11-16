@@ -83,10 +83,34 @@ func end_day(result: Dictionary) -> void:
 	assert(run != null, "end_day called with no active run")
 	assert(result.has("payment"), "end_day: result has no 'payment'")
 	run.wallet += float(result["payment"])
+	run.contracts_completed += int(result.get("contracts_completed", 0))
+	run.total_earned += float(result["payment"])
+	run.total_damage += float(result.get("damage", 0.0))
+	run.best_day = maxf(run.best_day, float(result["payment"]))
 	run.day += 1
 	_day_open = false
 	_write_run()
 	_write_profile()
+
+
+## Deletes the saved run in `slot` to free it. The profile is untouched. If that run is
+## the active one it is cleared too.
+func delete_run(slot: int) -> void:
+	var path := _slot_path(slot)
+	if FileAccess.file_exists(path):
+		var err := DirAccess.remove_absolute(path)
+		if err != OK:
+			_fail("Could not delete %s: %s" % [path, error_string(err)])
+			return
+	if run != null and not is_mirror and run.slot == slot:
+		run = null
+		_day_open = false
+
+
+## When the run in `slot` was last written (unix time, local), or 0 if the slot is empty.
+func slot_saved_at(slot: int) -> int:
+	var path := _slot_path(slot)
+	return int(FileAccess.get_modified_time(path)) if FileAccess.file_exists(path) else 0
 
 
 ## Ends the run (deletes its slot, keeps the profile) and clears the active run.
