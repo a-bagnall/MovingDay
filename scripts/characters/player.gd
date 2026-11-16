@@ -10,9 +10,14 @@ class_name Player
 ## True if this machine's InputSetup drives the player; false when something else
 ## (the network layer) fills `input` each frame.
 @export var is_local := true
-## Optional GLB/PackedScene for the character model. Should face -Z.
+## Optional override model (should face -Z). Normally leave this empty: the model comes
+## from CharacterCatalog, by the player's choice.
 @export var model_scene: PackedScene
 @export var model_scale: float = 1.0
+## Index into CharacterCatalog.ENTRIES. -1 = whatever this player id picked.
+var character := -1
+## True while the player is picking a character: they stand still.
+var movement_locked := false
 
 @export_group("Movement")
 @export var max_speed: float = 5.0
@@ -103,6 +108,10 @@ func _build_visual() -> void:
 			(model as Node3D).scale = Vector3.ONE * model_scale
 		_visual.add_child(model)
 		return
+	if character < 0:
+		character = CharacterCatalog.choice_for(player_id)
+	if _attach_character(character):
+		return
 
 	# Placeholder: coloured capsule with a "nose" so facing is readable.
 	var mesh := MeshInstance3D.new()
@@ -123,6 +132,75 @@ func _build_visual() -> void:
 	_visual.add_child(nose)
 
 
+## Switches to catalogue character `index`, keeping the facing and squash state.
+func set_character(index: int) -> void:
+	index = CharacterCatalog.clamp_index(index)
+	if index == character or _visual == null or model_scene != null:
+		return
+	var old := _visual.get_node_or_null("Character")
+	if old:
+		_visual.remove_child(old)
+		old.queue_free()
+	character = index
+	_attach_character(index)
+
+
+## Builds the character model under _visual, scaled to its catalogue height with its
+## feet on the ground and centred on the player. False if the model could not load.
+func _attach_character(index: int) -> bool:
+	var entry: Dictionary = CharacterCatalog.ENTRIES[CharacterCatalog.clamp_index(index)]
+	var scene := load(entry["path"]) as PackedScene
+	if scene == null:
+		return false
+	var root := Node3D.new()
+	root.name = "Character"
+	var model := scene.instantiate() as Node3D
+	if model == null:
+		return false
+	root.add_child(model)
+	_visual.add_child(root)
+
+	var box := _mesh_bounds(model, Transform3D.IDENTITY)
+	if box.size.y > 0.0001:
+		var fit: float = float(entry["height"]) / box.size.y
+		model.scale *= fit
+		# Feet on the floor, centred under the player (bounds were in unscaled model space).
+		model.position = Vector3(-(box.position.x + box.size.x * 0.5) * fit, -box.position.y * fit,
+			-(box.position.z + box.size.z * 0.5) * fit)
+	root.rotation.y = float(entry["yaw"])
+	# Robot-style models ship with animations: play an idle if there is one.
+	for node in model.find_children("*", "AnimationPlayer", true, false):
+		var anim := node as AnimationPlayer
+		for anim_name in anim.get_animation_list():
+			if "idle" in String(anim_name).to_lower():
+				anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR
+				anim.play(anim_name)
+				break
+	return true
+
+
+## Combined bounds of every mesh under `node`, in the space of the node whose
+## transform is `to_root` (identity for the model root itself).
+func _mesh_bounds(node: Node3D, to_root: Transform3D) -> AABB:
+	var result := AABB()
+	var have := false
+	var stack: Array = [[node, to_root]]
+	while not stack.is_empty():
+		var item: Array = stack.pop_back()
+		var n: Node3D = item[0]
+		var xf: Transform3D = item[1]
+		if n != node:
+			xf = xf * n.transform
+		if n is MeshInstance3D and (n as MeshInstance3D).mesh:
+			var b := xf * (n as MeshInstance3D).mesh.get_aabb()
+			result = b if not have else result.merge(b)
+			have = true
+		for child in n.get_children():
+			if child is Node3D:
+				stack.append([child, xf])
+	return result
+
+
 ## Reads this machine's input source into `input`. Remote players are skipped:
 ## their input is set from outside.
 func _poll_input() -> void:
@@ -137,7 +215,8 @@ func _physics_process(delta: float) -> void:
 	if not is_local:
 		_follow_remote(delta)
 		return
-	var input_dir := Vector3(input.move.x, 0.0, input.move.y).rotated(Vector3.UP, CAMERA_YAW)
+	var move := Vector2.ZERO if movement_locked else input.move
+	var input_dir := Vector3(move.x, 0.0, move.y).rotated(Vector3.UP, CAMERA_YAW)
 
 	_stumble_left = maxf(_stumble_left - delta, 0.0)
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
@@ -176,17 +255,21 @@ func _physics_process(delta: float) -> void:
 	_interact_prev = input.interact
 
 
-## State to stream to other machines: [id, position, velocity, facing, move, interact].
+## State to stream to other machines:
+## [id, position, velocity, facing, move, interact, character].
 func net_state() -> Array:
 	return [player_id, global_position, velocity, _visual.rotation.y if _visual else 0.0,
-		input.move, input.interact]
+		input.move, input.interact, character]
 
 
 ## Remote players: remember where the owning machine says this player is, and feed
 ## its input so interact presses reach the area's zones. `velocity_` is kept so the
 ## furniture this player carries (simulated on the host) can match its speed.
 func apply_net_state(position_: Vector3, yaw: float, move: Vector2, interact: bool,
-		velocity_ := Vector3.ZERO) -> void:
+		velocity_ := Vector3.ZERO, character_ := -1) -> void:
+	if character_ >= 0:
+		CharacterCatalog.choose(player_id, character_)
+		set_character(character_)
 	_net_position = position_
 	_net_yaw = yaw
 	input.move = move

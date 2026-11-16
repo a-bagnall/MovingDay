@@ -4,14 +4,12 @@ extends Node3D
 ## doorway, an exit on the east wall, a loft over the west room, a basement
 ## under the east room, and a truck bay outside.
 ##
-## Replace placeholder players/furniture with the real models by setting
-## PLAYER_MODELS and FURNITURE_MODELS below (res:// paths to .glb files).
+## Players use CharacterCatalog; replace placeholder furniture with real models via
+## FURNITURE_MODELS below (res:// paths to .glb files).
 
 const WALL_HEIGHT := 1.2   # low walls keep the iso view readable until cutaways exist
 const WALL_THICKNESS := 0.3
 
-## Optional: map to your imported models, e.g. {1: "res://assets/characters/models/raccoon.glb"}
-const PLAYER_MODELS := {}
 ## Furniture key -> model path.
 const FURNITURE_MODELS := {
 	"sofa": "res://assets/furniture/residential/couch.gltf",
@@ -284,8 +282,6 @@ func _spawn_player(player_id: int, local: bool) -> void:
 	var p := Player.new()
 	p.player_id = player_id
 	p.is_local = local
-	if PLAYER_MODELS.has(player_id):
-		p.model_scene = load(PLAYER_MODELS[player_id])
 	p.position = PLAYER_SPAWNS[player_id - 1]
 	add_child(p)
 

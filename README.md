@@ -16,6 +16,8 @@ The game starts in the main menu. Hold the interact button there to claim a play
 | Keyboard | Arrow keys | Enter |
 | Gamepad | Left stick | A |
 
+Characters: a new player picks one on joining (left/right to choose, interact to confirm), and anyone can change it later on the pink Wardrobe pad. Everyone sees everyone's pick, online too. Each character is scaled to a set height in `scripts/characters/character_catalog.gd`; if one looks backwards in game, change its `yaw` there.
+
 Heavy items need two players (one player can lift them, but loses grip easily). Press interact on the results screen to continue. Press F3 for a debug overlay showing grip, damage and impact values.
 
 ## Online (LAN or internet)
