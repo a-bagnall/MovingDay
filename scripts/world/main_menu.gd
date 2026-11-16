@@ -156,7 +156,10 @@ func _slot_text(slot: int) -> String:
 	var state := SaveManager.peek_run(slot)
 	if state == null:
 		return "Slot %d\nNew run" % slot
-	return "Slot %d\nDay %d  %s" % [slot, state.day, UIKit.money(state.wallet)]
+	var text := "Slot %d\nDay %d  %s" % [slot, state.day, UIKit.money(state.wallet)]
+	if not state.modifiers.is_empty():
+		text += "\n%d modifier%s" % [state.modifiers.size(), "" if state.modifiers.size() == 1 else "s"]
+	return text
 
 
 ## An empty slot starts a new run. A saved one opens its details card (continue or

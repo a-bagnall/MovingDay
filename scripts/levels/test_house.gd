@@ -316,7 +316,7 @@ func _make(key: String, label: String, size: Vector3, mass: float, fragility: fl
 		assert(not area.has_point(pos), "%s is placed in a stair approach" % label)
 	d.display_name = label
 	d.size = size
-	d.mass = mass
+	d.mass = mass * RunModifiers.mass_multiplier()
 	d.fragility = fragility
 	d.value = value
 	d.players_required = players

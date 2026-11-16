@@ -448,7 +448,7 @@ func _physics_process(delta: float) -> void:
 	var control := 0.25 if _stumble_left > 0.0 else 1.0
 	var target := input_dir * max_speed * shop_speed_multiplier * speed_multiplier * control
 	var rate := acceleration * shop_acceleration_multiplier if input_dir.length() > 0.01 else braking
-	rate *= lerpf(0.5, 1.0, speed_multiplier)
+	rate *= lerpf(0.5, 1.0, speed_multiplier) * RunModifiers.control_multiplier()
 	if horizontal.dot(target) < 0.0:
 		rate *= reversal_penalty
 	horizontal = horizontal.move_toward(target, rate * delta)

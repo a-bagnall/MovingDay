@@ -480,7 +480,7 @@ func _update_grip(delta: float, strain: float) -> bool:
 		var shake := maxf(angular_velocity.length() - TEAM_SWING_FREE, 0.0) * TEAM_SLIP_PER_SWING \
 			+ maxf(strain - TEAM_STRAIN_FREE, 0.0) * TEAM_SLIP_PER_STRAIN
 		if shake > 0.0:
-			_grip_strength = maxf(_grip_strength - shake * delta, 0.0)
+			_grip_strength = maxf(_grip_strength - shake * RunModifiers.grip_drain_multiplier() * delta, 0.0)
 		else:
 			_grip_strength = minf(_grip_strength + SLIP_RECOVER * delta, 1.0)
 		return _grip_strength <= 0.0
@@ -488,7 +488,7 @@ func _update_grip(delta: float, strain: float) -> bool:
 	for p: Player in _holders.values():
 		speed = maxf(speed, Vector2(p.velocity.x, p.velocity.z).length())
 	var drain := SLIP_BASE + SLIP_PER_SPEED * speed + SLIP_PER_SWING * angular_velocity.length()
-	_grip_strength = maxf(_grip_strength - drain * delta, 0.0)
+	_grip_strength = maxf(_grip_strength - drain * RunModifiers.grip_drain_multiplier() * delta, 0.0)
 	return _grip_strength <= 0.0
 
 
@@ -662,7 +662,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 ## `excess` is how far the impact went past the damage threshold (m/s).
 func _apply_damage(excess: float) -> void:
 	# Sturdy things still take a little; fragile things take a lot.
-	var raw := excess * maxf(data.fragility, 0.1) * data.value * DAMAGE_SCALE
+	var raw := excess * maxf(data.fragility, 0.1) * data.value * DAMAGE_SCALE * RunModifiers.damage_multiplier()
 	var amount := minf(raw, data.value - total_damage)
 	if amount <= 0.01:
 		return

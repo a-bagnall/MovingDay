@@ -88,6 +88,7 @@ func _show_details() -> void:
 	_add_row(grid, "Best day", UIKit.money(state.best_day))
 	if not state.perks.is_empty():
 		_add_row(grid, "Perks", ", ".join(state.perks))
+	_add_row(grid, "Modifiers", RunModifiers.names(state.modifiers) if not state.modifiers.is_empty() else "None yet")
 	var saved := SaveManager.slot_saved_at(_slot)
 	if saved > 0:
 		_add_row(grid, "Last saved", Time.get_datetime_string_from_unix_time(saved, true).substr(0, 16))

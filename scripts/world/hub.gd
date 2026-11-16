@@ -17,6 +17,8 @@ const SHOP_ITEMS := {
 }
 
 var _truck_pad: InteractZone
+var _picker: ModifierPicker
+var _choosing := false   # the "choose one" card is up on this machine
 var _status: Label
 var _countdown := -1.0
 var _notice := ""
@@ -43,6 +45,14 @@ func _ready() -> void:
 	_add_shop_pad("workwear", Vector3(-2.0, 0.0, -3.0), Color("#668ca8"))
 	_add_shop_pad("enchanted_workwear", Vector3(-10.0, 0.0, 0.0), Color("#a58ac5"))
 
+	_picker = ModifierPicker.new()
+	_picker.chosen.connect(_on_modifier_chosen)
+	add_child(_picker)
+	# The host decides; clients see the result when the host's run reaches them.
+	if GameFlow.is_authority() and RunModifiers.choice_due(SaveManager.run):
+		_choosing = true
+		_picker.open(RunModifiers.offer(SaveManager.run))
+
 
 func _add_shop_pad(item_id: String, center: Vector3, color: Color) -> void:
 	var item: Dictionary = SHOP_ITEMS[item_id]
@@ -55,9 +65,18 @@ func _spawn_point(player_id: int) -> Vector3:
 	return Vector3(-13.0 + (player_id - 1) * 1.5, 0.1, 3.0)
 
 
+func _on_modifier_chosen(id: String) -> void:
+	SaveManager.run.modifiers.append(id)
+	SaveManager.run.modifier_day = SaveManager.run.day
+	_choosing = false
+	_set_notice("%s is now part of this run" % RunModifiers.modifier_name(id))
+	GameFlow.sync_run()
+
+
 func _process(delta: float) -> void:
 	var total := get_tree().get_nodes_in_group("players").size()
-	if total > 0 and _truck_pad.players_inside().size() == total:
+	var waiting_for_choice := _choosing or (not GameFlow.is_authority() and RunModifiers.choice_due(SaveManager.run))
+	if total > 0 and not _choosing and _truck_pad.players_inside().size() == total:
 		if _countdown < 0.0:
 			_countdown = COUNTDOWN_TIME
 		_countdown -= delta
@@ -74,6 +93,10 @@ func _process(delta: float) -> void:
 	_notice_time = maxf(0.0, _notice_time - delta)
 	var status_text := "Day %d   Wallet %s\nBuy a boost or outfit, then all players stand on the truck pad" % [
 		SaveManager.run.day, UIKit.money(SaveManager.run.wallet)]
+	if not SaveManager.run.modifiers.is_empty():
+		status_text += "\nModifiers: " + RunModifiers.names(SaveManager.run.modifiers)
+	if waiting_for_choice and not _choosing:
+		status_text += "\nWaiting for the host to choose a modifier"
 	if _notice_time > 0.0:
 		status_text += "\n" + _notice
 	_status.text = status_text

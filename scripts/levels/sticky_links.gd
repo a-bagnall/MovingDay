@@ -9,6 +9,7 @@ extends Node
 ## physics joint, because the host simulates the furniture and streams the result.
 
 const FIRST_STICKY_DAY := 3
+const PAIR_EVERY_DAYS := 5   # one more stuck pair this many days after the last
 const MAX_PAIRS := 3
 ## Pairs heavier than this are skipped, so a stuck pair can always be moved by its team.
 const MAX_COMBINED_MASS := 85.0
@@ -19,11 +20,13 @@ const GLUE_DELAY := 1.3
 const GUM_COLOR := Color(1.0, 0.45, 0.7)
 
 
-## How many stuck pairs a job on `day` has: 1 from day 3, one more every 3 days.
+## How many stuck pairs a job on `day` has: 1 from day 3, one more every 5 days, and
+## one more with the Gum Everywhere modifier.
 static func pair_count(day: int) -> int:
-	if day < FIRST_STICKY_DAY:
-		return 0
-	return mini(1 + (day - FIRST_STICKY_DAY) / 3, MAX_PAIRS)
+	var base := 0
+	if day >= FIRST_STICKY_DAY:
+		base = 1 + (day - FIRST_STICKY_DAY) / PAIR_EVERY_DAYS
+	return mini(base + RunModifiers.extra_sticky_pairs(), MAX_PAIRS)
 
 
 func setup(items: Array[Furniture], day: int, slot: int) -> void:

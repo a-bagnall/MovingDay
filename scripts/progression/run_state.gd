@@ -12,6 +12,10 @@ var slot := 1
 var wallet := 0.0
 var day := 1
 var perks: Array[String] = []
+## "Choose one" modifiers picked so far this run (see RunModifiers), and the day the
+## last one was picked, so a choice is not offered twice for the same hub visit.
+var modifiers: Array[String] = []
+var modifier_day := 0
 ## Lifetime stats of this run, updated when a day ends.
 var contracts_completed := 0
 var total_earned := 0.0
@@ -31,6 +35,8 @@ func to_dict() -> Dictionary:
 		"wallet": wallet,
 		"day": day,
 		"perks": perks.duplicate(),
+		"modifiers": modifiers.duplicate(),
+		"modifier_day": modifier_day,
 		"contracts_completed": contracts_completed,
 		"total_earned": total_earned,
 		"total_damage": total_damage,
@@ -69,6 +75,12 @@ static func from_dict(data: Dictionary) -> RunState:
 	state.speed_boost = float(data.get("speed_boost", 1.0))
 	state.acceleration_boost_day = int(data.get("acceleration_boost_day", 0))
 	state.acceleration_boost = float(data.get("acceleration_boost", 1.0))
+	state.modifier_day = int(data.get("modifier_day", 0))
+	var saved_modifiers: Variant = data.get("modifiers", [])
+	if typeof(saved_modifiers) == TYPE_ARRAY:   # optional: older saves have none
+		for id in saved_modifiers:
+			if typeof(id) == TYPE_STRING:   # unknown ids are kept: they show by id
+				state.modifiers.append(id)
 	for perk in data["perks"]:
 		if typeof(perk) != TYPE_STRING:
 			push_error("RunState: 'perks' contains a non-string entry")
