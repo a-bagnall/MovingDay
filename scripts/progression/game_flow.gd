@@ -7,15 +7,20 @@ extends Node
 ## job screens show the same thing), and the clients change scene with it. Clients that
 ## want something to happen (continue past the briefing) ask the host.
 
-const DAY_LENGTH := 10.0
-const HUB_EVERY_N_DAYS := 3
+const DAY_LENGTH := Balance.DAY_LENGTH
+const HUB_EVERY_N_DAYS := Balance.HUB_EVERY_N_DAYS
+
+## Why a run ended (see fail_run).
+const CAUSE_BANKRUPT := "bankrupt"
+const RUN_HISTORY_PATH := "user://run_history.jsonl"
 
 const MAIN_MENU_SCENE := "res://scenes/main/main_menu.tscn"
 const HUB_SCENE := "res://scenes/levels/hub.tscn"
 const JOB_SCENE := "res://scenes/levels/test_house.tscn"
 const BRIEFING_SCENE := "res://scenes/ui/briefing.tscn"
+const RUN_OVER_SCENE := "res://scenes/ui/run_over.tscn"
 
-const _SCENES := [MAIN_MENU_SCENE, HUB_SCENE, JOB_SCENE, BRIEFING_SCENE]
+const _SCENES := [MAIN_MENU_SCENE, HUB_SCENE, JOB_SCENE, BRIEFING_SCENE, RUN_OVER_SCENE]
 
 var day_time_remaining := DAY_LENGTH
 var day_clock_running := false
@@ -23,6 +28,9 @@ var day_contract_count := 0
 var day_total: Dictionary = {}
 var previous_contract_result: Dictionary = {}
 var current_contract: Contract
+## Filled when a run ends (fail_run) and read by the run-over screen. The run itself is
+## gone by then, so everything the screen shows is copied in here.
+var run_summary: Dictionary = {}
 
 ## Counts scene changes. Messages about a scene carry it, so a late one from the
 ## previous scene is recognised and ignored.
@@ -109,9 +117,73 @@ func finish_day() -> void:
 	assert(SaveManager.run != null, "finish_day called with no active run")
 	assert(day_contract_count > 0, "Cannot finish a day without completing a contract")
 	day_clock_running = false
-	SaveManager.end_day(day_total)
+	var take_home := float(day_total.get("payment", 0.0))
+	var overhead := overhead_for_day(SaveManager.run.day)
+	SaveManager.end_day(day_total, overhead)
+	if SaveManager.run.wallet < 0.0:
+		fail_run(CAUSE_BANKRUPT, take_home, overhead)
+		return
 	_reset_day_state()
 	_enter_day()
+
+
+## What the company pays at the end of `day`: base costs that grow each day, times any
+## Greedy Landlord. The briefing shows this before the day closes.
+func overhead_for_day(day: int) -> float:
+	return Balance.overhead_for_day(day) * RunModifiers.overhead_multiplier()
+
+
+## Ends the run in failure: records it, deletes the slot (the profile stays) and shows the
+## run-over screen. `take_home` and `overhead` are the last day's money, for that screen.
+func fail_run(cause: String, take_home := 0.0, overhead := 0.0) -> void:
+	assert(SaveManager.run != null, "fail_run called with no active run")
+	day_clock_running = false
+	run_summary = _build_run_summary(cause, take_home, overhead)
+	_log_run(run_summary)
+	SaveManager.end_run()
+	_reset_day_state()
+	_go(RUN_OVER_SCENE)
+
+
+func _build_run_summary(cause: String, take_home: float, overhead: float) -> Dictionary:
+	var run := SaveManager.run
+	var days_completed := maxi(run.day - 1, 0)   # end_day has already moved on to the next day
+	var profile := SaveManager.profile
+	var new_best := days_completed > profile.best_run_day
+	profile.best_run_day = maxi(profile.best_run_day, days_completed)
+	profile.runs_ended += 1
+	return {
+		"cause": cause,
+		"slot": run.slot,
+		"days_completed": days_completed,
+		"wallet": run.wallet,
+		"contracts_completed": run.contracts_completed,
+		"total_earned": run.total_earned,
+		"total_damage": run.total_damage,
+		"total_overhead": run.total_overhead,
+		"best_day": run.best_day,
+		"modifiers": run.modifiers.duplicate(),
+		"perks": run.perks.duplicate(),
+		"last_take_home": take_home,
+		"last_overhead": overhead,
+		"best_run_day": profile.best_run_day,
+		"new_best": new_best,
+	}
+
+
+## Appends one line per ended run to user://run_history.jsonl, for comparing playtests.
+## (In Godot: Project > Open User Data Folder.)
+func _log_run(summary: Dictionary) -> void:
+	var entry := summary.duplicate()
+	entry["ended_at"] = Time.get_datetime_string_from_system()
+	var mode := FileAccess.READ_WRITE if FileAccess.file_exists(RUN_HISTORY_PATH) else FileAccess.WRITE
+	var file := FileAccess.open(RUN_HISTORY_PATH, mode)
+	if file == null:
+		push_warning("GameFlow: could not write %s" % RUN_HISTORY_PATH)
+		return
+	file.seek_end()
+	file.store_line(JSON.stringify(entry))
+	file.close()
 
 
 ## Returns to the main menu without touching any run.
@@ -206,6 +278,7 @@ func _snapshot() -> Dictionary:
 		"day_total": day_total.duplicate(true),
 		"previous": previous_contract_result.duplicate(true),
 		"contract": _contract_to_dict(current_contract),
+		"run_summary": run_summary.duplicate(true),
 	}
 
 
@@ -221,6 +294,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 	day_total = snapshot.get("day_total", {})
 	previous_contract_result = snapshot.get("previous", {})
 	current_contract = _contract_from_dict(snapshot.get("contract", {}))
+	run_summary = snapshot.get("run_summary", {})
 
 
 static func _contract_to_dict(contract: Contract) -> Dictionary:
@@ -271,7 +345,8 @@ func _client_scene_ready(serial: int) -> void:
 ## Client -> host: "someone here pressed continue on the briefing".
 @rpc("any_peer", "call_remote", "reliable")
 func _request_continue(serial: int) -> void:
-	# Compared by scene path, not by the Briefing class: Briefing already depends on GameFlow.
+	# Compared by scene path, not by the Briefing class: Briefing uses GameFlow, so naming the
+	# class here makes the two scripts depend on each other and neither compiles.
 	var scene := get_tree().current_scene
 	if NetworkManager.is_host() and serial == scene_serial and scene != null \
 			and scene.scene_file_path == BRIEFING_SCENE:

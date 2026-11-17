@@ -79,14 +79,41 @@ func begin_day() -> void:
 
 
 ## `result` is the accumulated day summary, not an individual contract result.
-func end_day(result: Dictionary) -> void:
+## `overhead` is the day's running costs; it can take the wallet below zero (the caller
+## decides what that means).
+func end_day(result: Dictionary, overhead := 0.0) -> void:
 	assert(run != null, "end_day called with no active run")
 	assert(result.has("payment"), "end_day: result has no 'payment'")
-	run.wallet += float(result["payment"])
+	run.wallet += float(result["payment"]) - overhead
+	run.total_overhead += overhead
+	run.contracts_completed += int(result.get("contracts_completed", 0))
+	run.total_earned += float(result["payment"])
+	run.total_damage += float(result.get("damage", 0.0))
+	run.best_day = maxf(run.best_day, float(result["payment"]))
 	run.day += 1
 	_day_open = false
 	_write_run()
 	_write_profile()
+
+
+## Deletes the saved run in `slot` to free it. The profile is untouched. If that run is
+## the active one it is cleared too.
+func delete_run(slot: int) -> void:
+	var path := _slot_path(slot)
+	if FileAccess.file_exists(path):
+		var err := DirAccess.remove_absolute(path)
+		if err != OK:
+			_fail("Could not delete %s: %s" % [path, error_string(err)])
+			return
+	if run != null and not is_mirror and run.slot == slot:
+		run = null
+		_day_open = false
+
+
+## When the run in `slot` was last written (unix time, local), or 0 if the slot is empty.
+func slot_saved_at(slot: int) -> int:
+	var path := _slot_path(slot)
+	return int(FileAccess.get_modified_time(path)) if FileAccess.file_exists(path) else 0
 
 
 ## Ends the run (deletes its slot, keeps the profile) and clears the active run.
@@ -124,6 +151,47 @@ func _write_run() -> void:
 	if is_mirror:
 		return
 	_write_json(_slot_path(run.slot), run.to_dict())
+
+
+## Remembers the character the `ordinal`-th player on this computer picked. Written
+## straight away (it is this computer's own preference, even while mirroring a host's run).
+func remember_character(ordinal: int, character: int) -> void:
+	if ordinal < 0 or ordinal >= InputSetup.MAX_PLAYERS:
+		return
+	while profile.characters.size() <= ordinal:
+		profile.characters.append(-1)
+	if profile.characters[ordinal] == character:
+		return
+	profile.characters[ordinal] = character
+	_write_json(PROFILE_PATH, profile.to_dict())
+
+
+## Same for the colour.
+func remember_color(ordinal: int, color: int) -> void:
+	if ordinal < 0 or ordinal >= InputSetup.MAX_PLAYERS:
+		return
+	while profile.colors.size() <= ordinal:
+		profile.colors.append(-1)
+	if profile.colors[ordinal] == color:
+		return
+	profile.colors[ordinal] = color
+	_write_json(PROFILE_PATH, profile.to_dict())
+
+
+## The remembered colour for the `ordinal`-th local player, or -1.
+func remembered_color(ordinal: int) -> int:
+	if ordinal < 0 or ordinal >= profile.colors.size():
+		return -1
+	var value := profile.colors[ordinal]
+	return value if value >= 0 and value < CharacterCatalog.color_count() else -1
+
+
+## The remembered character for the `ordinal`-th local player, or -1.
+func remembered_character(ordinal: int) -> int:
+	if ordinal < 0 or ordinal >= profile.characters.size():
+		return -1
+	var value := profile.characters[ordinal]
+	return value if value >= 0 and value < CharacterCatalog.count() else -1
 
 
 func _write_profile() -> void:

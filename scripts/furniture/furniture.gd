@@ -20,9 +20,16 @@ var is_puppet := false
 var net_id := -1
 ## The speed multiplier the host gave this item's holders; sent so clients can apply it.
 var net_speed_mult := 1.0
+## Heave-ho state. `heave_count` goes up on every heave so other machines can show it.
+var heave_count := 0
+var _last_heave_count := -1   # puppet: the count last seen (-1 until the first state)
+var _heave_pressed := {}   # Player -> when (seconds) it last pressed Heave
+var _heave_prev := {}      # Player -> whether Heave was down last frame
+var _heave_cooldown := 0.0
+var _heave_left := 0.0
 
 const GRIP_REACH := 0.65      ## Distance from the furniture end to where a player stands.
-const MAX_CARRY_ACCEL := 45.0
+const MAX_CARRY_ACCEL := Balance.MAX_CARRY_ACCEL
 const MAX_STRAIN := 2.2       ## Grip further than this from the holder = auto-drop (e.g. a player pinned by a wall). Must exceed Player.reach (1.8) or far grabs drop instantly.
 ## Players are locked to the grip point they grabbed: each frame they are pulled
 ## back toward it, so the item's rotation swings them around and corners are hard.
@@ -45,8 +52,8 @@ const TEAM_STRAIN_FREE := 0.9      ## Grip-to-holder stretch (m) a team can abso
 const TEAM_SLIP_PER_STRAIN := 0.4  ## Grip lost per second per metre above that.
 const DAMAGE_SCALE := 0.5          ## Overall damage harshness (was 0.25).
 const FURNITURE_HIT_THRESHOLD := 0.6  ## Furniture-vs-furniture knocks count at this fraction of the threshold.
-const HOLD_GRAVITY_SCALE := 0.6   ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
-const HELD_ANGULAR_DAMP := 4.0     ## Rotational drag while held; higher = less wobble and swing.
+const HOLD_GRAVITY_SCALE := Balance.HOLD_GRAVITY_SCALE   ## Gravity while fully lifted (1.0 = full weight, lower = floatier).
+const HELD_ANGULAR_DAMP := Balance.HELD_ANGULAR_DAMP     ## Rotational drag while held; higher = less wobble and swing.
 const DISSOLVE_TIME := 0.8
 ## Feedback ("pizzazz")
 const WOBBLE_START := 0.65         ## Below this grip strength the item starts to wobble.
@@ -75,6 +82,8 @@ var _grip_strength := 1.0       ## 1 = secure, 0 = slips free. Only drains when 
 var _grip_grace := 0.0
 var _damage_cooldown := 0.0
 var _flash := 0.0
+var _grip_warning_flash := 0.0
+var _last_grip_warning := false
 var _time := 0.0
 var _shake := 0.0               ## Damage jitter, 1 -> 0.
 var _prev_vy := 0.0
@@ -152,6 +161,8 @@ func _build_visual() -> void:
 	var label := Label3D.new()
 	# Say who can carry it, so it "makes sense" before anyone tries.
 	var who := "2 players" if data.players_required >= 2 else "1 player"
+	if data.players_required >= 2 and NetworkManager.is_solo():
+		who += " (slow alone)"
 	label.text = "%s\n%s - %s" % [data.display_name, _tier_text(), who]
 	label.modulate = _tier_color()
 	label.outline_size = 8
@@ -297,6 +308,11 @@ func _process(delta: float) -> void:
 	if is_held():
 		wobble = clampf((WOBBLE_START - _grip_strength) / WOBBLE_START, 0.0, 1.0)
 	var tilt := wobble * WOBBLE_ANGLE
+	var warning := is_held() and _grip_strength <= 0.4
+	if warning and not _last_grip_warning:
+		_grip_warning_flash = 1.0
+	_last_grip_warning = warning
+	_grip_warning_flash = maxf(_grip_warning_flash - delta * 2.8, 0.0)
 	_visual.rotation = Vector3(sin(_time * 23.0) * tilt, 0.0, sin(_time * 19.0 + 1.0) * tilt)
 	_shake = maxf(_shake - delta * 4.0, 0.0)
 	_visual.position = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)) * _shake * 0.08
@@ -364,12 +380,17 @@ func _spawn_dust(strength: float) -> void:
 
 
 func _show_damage_popup(amount: float) -> void:
+	_show_popup("IMPACT  -$%d" % maxi(roundi(amount), 1), Color(1.0, 0.3, 0.3))
+
+
+## A short rising label over the item.
+func _show_popup(text: String, color: Color) -> void:
 	var parent := get_parent()
 	if parent == null:
 		return
 	var label := Label3D.new()
-	label.text = "-$%d" % maxi(roundi(amount), 1)
-	label.modulate = Color(1.0, 0.3, 0.3)
+	label.text = text
+	label.modulate = color
 	label.outline_size = 10
 	UIKit.style_label3d(label)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -402,7 +423,8 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var holder_count := _holders.size()
-	var lift := clampf(float(holder_count) / float(data.players_required), 0.0, 1.0)
+	_update_heave(delta)
+	var lift := clampf(float(holder_count) / float(_players_needed()), 0.0, 1.0)
 	gravity_scale = lerpf(1.0, HOLD_GRAVITY_SCALE, lift)
 
 	var drop_list: Array[Player] = []
@@ -448,6 +470,8 @@ func _target_for(player: Player, lift: float) -> Vector3:
 	var hold_height := maxf(_size.y * 0.5 + 0.15, 0.7)
 	var target := player.global_position
 	target.y = player.global_position.y + lerpf(0.1, hold_height, lift)
+	if player.input.lift:
+		target.y += Balance.LIFT_EXTRA_HEIGHT * lift   # held over the head: clears rails and counters
 	return target
 
 
@@ -469,27 +493,70 @@ func pull_holder(player: Player, delta: float) -> void:
 		return
 
 
+## How many players it takes to lift this item right now. A lone player is the whole team,
+## so for them everything is a one-person lift (slowly, see _update_player_speed).
+func _players_needed() -> int:
+	return 1 if NetworkManager.is_solo() else data.players_required
+
+
 ## Returns true when the grip has given out and everyone should let go.
 func _update_grip(delta: float, strain: float) -> bool:
 	if _grip_grace > 0.0:
 		_grip_grace -= delta   # settling in after the grab: no slipping yet
 		return false
-	if _holders.size() >= data.players_required:
+	var lift_drain := 0.0
+	for p: Player in _holders.values():
+		if p.input.lift:
+			lift_drain = Balance.LIFT_GRIP_DRAIN
+	if _holders.size() >= _players_needed():
 		# A full team is steady, but wild swinging or players pulling apart
 		# still shakes the grip loose.
 		var shake := maxf(angular_velocity.length() - TEAM_SWING_FREE, 0.0) * TEAM_SLIP_PER_SWING \
 			+ maxf(strain - TEAM_STRAIN_FREE, 0.0) * TEAM_SLIP_PER_STRAIN
+		shake += lift_drain
 		if shake > 0.0:
-			_grip_strength = maxf(_grip_strength - shake * delta, 0.0)
+			_grip_strength = maxf(_grip_strength - shake * RunModifiers.grip_drain_multiplier() * delta, 0.0)
 		else:
 			_grip_strength = minf(_grip_strength + SLIP_RECOVER * delta, 1.0)
 		return _grip_strength <= 0.0
 	var speed := 0.0
 	for p: Player in _holders.values():
 		speed = maxf(speed, Vector2(p.velocity.x, p.velocity.z).length())
-	var drain := SLIP_BASE + SLIP_PER_SPEED * speed + SLIP_PER_SWING * angular_velocity.length()
-	_grip_strength = maxf(_grip_strength - drain * delta, 0.0)
+	var drain := SLIP_BASE + SLIP_PER_SPEED * speed + SLIP_PER_SWING * angular_velocity.length() + lift_drain
+	_grip_strength = maxf(_grip_strength - drain * RunModifiers.grip_drain_multiplier() * delta, 0.0)
 	return _grip_strength <= 0.0
+
+
+## Heave-ho: when everyone carrying a two-person item presses Heave within a third of a
+## second, the team gets a burst of speed and a fresh grip.
+func _update_heave(delta: float) -> void:
+	_heave_cooldown = maxf(_heave_cooldown - delta, 0.0)
+	_heave_left = maxf(_heave_left - delta, 0.0)
+	var now := Time.get_ticks_msec() / 1000.0
+	for p: Player in _holders.values():
+		var down := p.input.heave
+		if down and not _heave_prev.get(p, false):
+			_heave_pressed[p] = now
+		_heave_prev[p] = down
+	if _heave_cooldown > 0.0 or _players_needed() < 2 or _holders.size() < _players_needed():
+		return
+	for p: Player in _holders.values():
+		if now - float(_heave_pressed.get(p, -99.0)) > Balance.HEAVE_WINDOW:
+			return
+	_heave_pressed.clear()
+	_heave_cooldown = Balance.HEAVE_COOLDOWN
+	_heave_left = Balance.HEAVE_DURATION
+	_grip_strength = 1.0
+	_grip_grace = maxf(_grip_grace, 0.5)
+	heave_count += 1
+	_celebrate_heave()
+
+
+func _celebrate_heave() -> void:
+	_show_popup("HEAVE-HO!", Color(1.0, 0.9, 0.4))
+	_pop(1.2)
+	for p: Player in _holders.values():
+		p.pop()
 
 
 func _update_player_speed(lift: float, strain: float) -> void:
@@ -501,7 +568,11 @@ func _update_player_speed(lift: float, strain: float) -> void:
 	var mult := clampf(cap - weight_factor * 0.4, 0.3, cap)
 	if lift < 1.0:
 		mult = minf(mult, 0.3)   # not enough people: drag, don't lift
+	if data.players_required >= 2 and NetworkManager.is_solo():
+		mult = Balance.SOLO_HEAVY_SPEED   # a whole two-person item on one back
 	mult *= clampf(1.0 - maxf(strain - 0.8, 0.0) / 2.5, 0.25, 1.0)
+	if _heave_left > 0.0:
+		mult *= Balance.HEAVE_SPEED_BOOST
 	net_speed_mult = mult
 	for player in _holders.values():
 		(player as Player).speed_multiplier = mult
@@ -548,7 +619,7 @@ func net_state() -> Array:
 			holders.append([i, (holder as Player).player_id])
 	return [net_id, global_position, global_transform.basis.get_rotation_quaternion(),
 		linear_velocity, angular_velocity, holders, net_speed_mult, grip_percent(),
-		total_damage, is_delivered]
+		total_damage, is_delivered, heave_count]
 
 
 ## Client: takes the host's state. `players` maps player id -> Player on this machine.
@@ -571,6 +642,11 @@ func net_apply_state(state: Array, players: Dictionary) -> void:
 	_net_set_holders(holders)
 	_grip_strength = float(state[7]) / 100.0
 	_net_take_damage(float(state[8]))
+	if state.size() > 10:
+		var count := int(state[10])
+		if _last_heave_count >= 0 and count > _last_heave_count:
+			_celebrate_heave()   # the host heaved: show it here too
+		_last_heave_count = count
 	if state[9]:
 		deliver()
 
@@ -662,16 +738,64 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 ## `excess` is how far the impact went past the damage threshold (m/s).
 func _apply_damage(excess: float) -> void:
 	# Sturdy things still take a little; fragile things take a lot.
-	var raw := excess * maxf(data.fragility, 0.1) * data.value * DAMAGE_SCALE
+	var raw := excess * maxf(data.fragility, 0.1) * data.value * DAMAGE_SCALE * RunModifiers.damage_multiplier()
+	_deal_damage(raw)
+
+
+## Takes `raw` damage (capped at what the item has left) with the usual feedback.
+func _deal_damage(raw: float) -> void:
 	var amount := minf(raw, data.value - total_damage)
 	if amount <= 0.01:
 		return
 	total_damage += amount
 	_damage_cooldown = 0.25
 	_flash = 1.0
+	_grip_warning_flash = 0.0
 	_shake = 1.0
 	_show_damage_popup(amount)
 	damaged.emit(amount, total_damage)
+
+
+## True for an item a single player can throw: light, and needing one person. (Checked from
+## the item's data alone, so a client can ask too.)
+func is_throwable() -> bool:
+	return data != null and data.players_required <= 1 and mass <= Balance.THROW_MAX_MASS
+
+
+## Host (or offline): `player` lets go of this item and sends it flying at `velocity`.
+## Damage on landing comes from the normal impact rules.
+func throw_by(player: Player, velocity: Vector3) -> void:
+	if is_puppet or not is_throwable() or not _holders.values().has(player):
+		return
+	release(player)
+	sleeping = false
+	linear_velocity = velocity.limit_length(Balance.THROW_MAX_SPEED * 1.15)
+	angular_velocity = Vector3(randf_range(-4.0, 4.0), randf_range(-3.0, 3.0), randf_range(-4.0, 4.0))
+	_pop(1.2)
+
+
+## Host (or offline): a player shoved this item along `direction`. It moves, and fragile
+## things tend to break while sturdy ones mostly shrug it off.
+func shoved(direction: Vector3) -> void:
+	if is_puppet or is_held() or is_delivered or data == null:
+		return
+	var flat := Vector3(direction.x, 0.0, direction.z)
+	if flat.length() < 0.01:
+		return
+	apply_central_impulse(flat.normalized() * Balance.SHOVE_FURNITURE_IMPULSE)
+	if not damage_enabled:
+		return
+	var chance := 1.0 if data.tier() == FurnitureData.Tier.FRAGILE else \
+		clampf(data.fragility * Balance.SHOVE_BREAK_CHANCE_PER_FRAGILITY, Balance.SHOVE_MIN_BREAK_CHANCE, 1.0)
+	if randf() < chance:
+		var fraction := lerpf(Balance.SHOVE_DAMAGE_MIN_FRACTION, Balance.SHOVE_DAMAGE_MAX_FRACTION,
+			clampf(data.fragility, 0.0, 1.0))
+		_deal_damage(data.value * fragility_damage_scale() * fraction)
+
+
+## Modifiers such as Glass Cargo make everything break more easily, shoves included.
+func fragility_damage_scale() -> float:
+	return RunModifiers.damage_multiplier()
 
 
 func _update_flash(delta: float) -> void:
@@ -680,4 +804,6 @@ func _update_flash(delta: float) -> void:
 		return
 	var ratio := clampf(total_damage / maxf(data.value, 0.01), 0.0, 1.0)
 	var worn := _base_color.lerp(Color(0.35, 0.1, 0.1), ratio * 0.6)
-	_material.albedo_color = worn.lerp(Color.RED, _flash)
+	var warning_color := Color(1.0, 0.62, 0.12)
+	var warning_strength := _grip_warning_flash * (0.35 if is_held() and _grip_strength <= 0.4 else 0.0)
+	_material.albedo_color = worn.lerp(warning_color, warning_strength).lerp(Color.RED, _flash)

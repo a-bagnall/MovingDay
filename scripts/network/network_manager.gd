@@ -38,6 +38,14 @@ signal pushes_received(peer_id: int, pushes: Array)
 signal job_state_received(payload: Array)
 ## Client only: the host says one of this machine's players lost its grip.
 signal stumble_received(player_id: int)
+## Someone (on another machine) pinged a spot: [player id, world position].
+signal ping_received(player_id: int, position: Vector3)
+## Local player `player_id` was shoved: add `kick` (m/s) to its velocity.
+signal shove_received(player_id: int, kick: Vector3)
+## Host: a client shoved furniture `furniture_id` along `direction`.
+signal furniture_shove_requested(peer_id: int, furniture_id: int, direction: Vector3)
+## Host: a client's player `player_id` threw furniture `furniture_id` with `velocity`.
+signal throw_requested(peer_id: int, player_id: int, furniture_id: int, velocity: Vector3)
 
 const DEFAULT_PORT := 7777
 
@@ -115,6 +123,18 @@ func player_count() -> int:
 	return total
 
 
+## Players that make up this game: everyone online, or the players on this machine when
+## offline.
+func session_player_count() -> int:
+	return player_count() if is_online() else InputSetup.assigned_count()
+
+
+## True when one player is the whole team. Jobs stay possible alone: two-player items can
+## be carried by one person, slowly (Balance.SOLO_HEAVY_SPEED).
+func is_solo() -> bool:
+	return session_player_count() <= 1
+
+
 ## Connected machines, including this one.
 func peer_count() -> int:
 	return _roster.size()
@@ -171,6 +191,51 @@ func send_pushes(pushes: Array) -> void:
 func send_stumble(peer_id: int, player_id: int) -> void:
 	if mode == Mode.HOST and _is_connected():
 		_receive_stumble.rpc_id(peer_id, player_id)
+
+
+## Tells everyone else that local player `player_id` pinged `position`. A client sends it
+## to the host, which checks the player is the sender's and passes it on.
+func send_ping(player_id: int, position: Vector3) -> void:
+	if not _is_connected():
+		return
+	if mode == Mode.CLIENT:
+		_request_ping.rpc_id(1, player_id, position)
+	elif mode == Mode.HOST:
+		_relay_ping.rpc(player_id, position)
+
+
+## Shoves player `target_id` (on any machine) with velocity change `kick`. Always goes
+## through the host, which passes it to the machine that owns that player.
+func send_shove_player(target_id: int, kick: Vector3) -> void:
+	if not _is_connected():
+		return
+	if mode == Mode.CLIENT:
+		_request_shove_player.rpc_id(1, target_id, kick)
+	elif mode == Mode.HOST:
+		_route_shove(target_id, kick)
+
+
+## Client: asks the host to shove furniture `furniture_id` (the host simulates it).
+func send_shove_furniture(furniture_id: int, direction: Vector3) -> void:
+	if mode == Mode.CLIENT and _is_connected():
+		_request_shove_furniture.rpc_id(1, furniture_id, direction)
+
+
+## Client: asks the host to let go of `furniture_id` and throw it.
+func send_throw(player_id: int, furniture_id: int, velocity: Vector3) -> void:
+	if mode == Mode.CLIENT and _is_connected():
+		_request_throw.rpc_id(1, player_id, furniture_id, velocity)
+
+
+func _route_shove(target_id: int, kick: Vector3) -> void:
+	kick = kick.limit_length(Balance.SHOVE_PLAYER_SPEED * 1.25)   # never trust a size from the network
+	for peer_id: int in _roster:
+		if (_roster[peer_id] as Array).has(target_id):
+			if peer_id == 1:
+				shove_received.emit(target_id, kick)
+			else:
+				_deliver_shove.rpc_id(peer_id, target_id, kick)
+			return
 
 
 ## Whether messages can be sent right now (online and the connection is up).
@@ -404,6 +469,47 @@ func _receive_pushes(pushes: Array) -> void:
 @rpc("authority", "call_remote", "reliable")
 func _receive_stumble(player_id: int) -> void:
 	stumble_received.emit(player_id)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_ping(player_id: int, position: Vector3) -> void:
+	if mode != Mode.HOST:
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not _roster.get(sender, []).has(player_id):
+		return   # not one of that machine's players
+	ping_received.emit(player_id, position)
+	for peer in multiplayer.get_peers():
+		if peer != sender:
+			_relay_ping.rpc_id(peer, player_id, position)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _relay_ping(player_id: int, position: Vector3) -> void:
+	ping_received.emit(player_id, position)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_shove_player(target_id: int, kick: Vector3) -> void:
+	if mode == Mode.HOST:
+		_route_shove(target_id, kick)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _deliver_shove(target_id: int, kick: Vector3) -> void:
+	shove_received.emit(target_id, kick)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_shove_furniture(furniture_id: int, direction: Vector3) -> void:
+	if mode == Mode.HOST:
+		furniture_shove_requested.emit(multiplayer.get_remote_sender_id(), furniture_id, direction)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_throw(player_id: int, furniture_id: int, velocity: Vector3) -> void:
+	if mode == Mode.HOST:
+		throw_requested.emit(multiplayer.get_remote_sender_id(), player_id, furniture_id, velocity)
 
 
 # --- connection events (client side) ----------------------------------------

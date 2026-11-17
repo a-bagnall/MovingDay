@@ -4,14 +4,12 @@ extends Node3D
 ## doorway, an exit on the east wall, a loft over the west room, a basement
 ## under the east room, and a truck bay outside.
 ##
-## Replace placeholder players/furniture with the real models by setting
-## PLAYER_MODELS and FURNITURE_MODELS below (res:// paths to .glb files).
+## Players use CharacterCatalog; replace placeholder furniture with real models via
+## FURNITURE_MODELS below (res:// paths to .glb files).
 
-const WALL_HEIGHT := 1.2   # low walls keep the iso view readable until cutaways exist
+const WALL_HEIGHT := 2.0   # tall collision walls prevent players climbing out of the property
 const WALL_THICKNESS := 0.3
 
-## Optional: map to your imported models, e.g. {1: "res://assets/characters/models/raccoon.glb"}
-const PLAYER_MODELS := {}
 ## Furniture key -> model path.
 const FURNITURE_MODELS := {
 	"sofa": "res://assets/furniture/residential/couch.gltf",
@@ -77,6 +75,12 @@ func _ready() -> void:
 		_spawn_player(player_id, false)
 	SaveManager.begin_day()
 	_start_job(zone, items)   # trims `items` to the job's furniture before it first waits
+	var sticky := StickyLinks.new()
+	add_child(sticky)
+	sticky.setup(items, SaveManager.run.day, SaveManager.run.slot)   # day 3+: some items are stuck together
+	var puddles := SlipPatches.new()
+	add_child(puddles)
+	puddles.setup(items, Vector3(TRUCK_FOOT_X, 0.0, 0.0), SaveManager.run.day, SaveManager.run.slot)   # Wet Floors only
 	if NetworkManager.is_online():
 		var sync := JobSync.new()
 		sync.name = "JobSync"
@@ -284,8 +288,6 @@ func _spawn_player(player_id: int, local: bool) -> void:
 	var p := Player.new()
 	p.player_id = player_id
 	p.is_local = local
-	if PLAYER_MODELS.has(player_id):
-		p.model_scene = load(PLAYER_MODELS[player_id])
 	p.position = PLAYER_SPAWNS[player_id - 1]
 	add_child(p)
 
@@ -317,7 +319,7 @@ func _make(key: String, label: String, size: Vector3, mass: float, fragility: fl
 		assert(not area.has_point(pos), "%s is placed in a stair approach" % label)
 	d.display_name = label
 	d.size = size
-	d.mass = mass
+	d.mass = mass * RunModifiers.mass_multiplier()
 	d.fragility = fragility
 	d.value = value
 	d.players_required = players

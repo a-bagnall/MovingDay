@@ -42,10 +42,30 @@ func _ready() -> void:
 	if NetworkManager.is_host():
 		NetworkManager.interact_requested.connect(_on_interact_requested)
 		NetworkManager.pushes_received.connect(_on_pushes_received)
+		NetworkManager.furniture_shove_requested.connect(_on_furniture_shove_requested)
+		NetworkManager.throw_requested.connect(_on_throw_requested)
 	else:
 		NetworkManager.job_state_received.connect(_on_job_state_received)
 		NetworkManager.stumble_received.connect(_on_stumble_received)
 		GameFlow.report_scene_ready()   # the host starts sending once it knows we are here
+
+
+## NetworkManager outlives the job scene. Stop listening once this node leaves the tree: a
+## message arriving before it is freed would otherwise find get_tree() null.
+func _exit_tree() -> void:
+	_disconnect(NetworkManager.roster_changed, _drop_departed_players)
+	_disconnect(NetworkManager.player_states_received, _on_player_states_received)
+	_disconnect(NetworkManager.interact_requested, _on_interact_requested)
+	_disconnect(NetworkManager.pushes_received, _on_pushes_received)
+	_disconnect(NetworkManager.furniture_shove_requested, _on_furniture_shove_requested)
+	_disconnect(NetworkManager.throw_requested, _on_throw_requested)
+	_disconnect(NetworkManager.job_state_received, _on_job_state_received)
+	_disconnect(NetworkManager.stumble_received, _on_stumble_received)
+
+
+func _disconnect(source: Signal, target: Callable) -> void:
+	if source.is_connected(target):
+		source.disconnect(target)
 
 
 func _physics_process(delta: float) -> void:
@@ -82,7 +102,10 @@ func _on_player_states_received(peer_id: int, states: Array) -> void:
 		# Only accept states for players that peer actually owns.
 		if player == null or player.is_local or not allowed.has(player.player_id):
 			continue
-		player.apply_net_state(state[1], state[3], state[4], state[5], state[2])
+		var character: int = CharacterCatalog.clamp_index(state[6]) if (state as Array).size() > 6 else -1
+		var buttons: int = int(state[7]) if (state as Array).size() > 7 else 0
+		var color: int = CharacterCatalog.clamp_color(state[8]) if (state as Array).size() > 8 else -1
+		player.apply_net_state(state[1], state[3], state[4], state[5], state[2], character, buttons, color)
 
 
 func _find_player(player_id: int) -> Player:
@@ -173,6 +196,21 @@ func _on_pushes_received(_peer_id: int, pushes: Array) -> void:
 			continue
 		var impulse: Vector3 = entry[1]
 		item.apply_central_impulse(impulse.limit_length(item.mass * MAX_PUSH_PER_KG))
+
+
+func _on_furniture_shove_requested(_peer_id: int, furniture_id: int, direction: Vector3) -> void:
+	var item: Furniture = _items.get(furniture_id)
+	if item != null and is_instance_valid(item):
+		item.shoved(direction)
+
+
+func _on_throw_requested(peer_id: int, player_id: int, furniture_id: int, velocity: Vector3) -> void:
+	if not (NetworkManager.roster().get(peer_id, []) as Array).has(player_id):
+		return   # not one of that machine's players
+	var player := _find_player(player_id)
+	var item: Furniture = _items.get(furniture_id)
+	if player != null and not player.is_local and item != null and is_instance_valid(item):
+		item.throw_by(player, velocity)
 
 
 # --- client: furniture ----------------------------------------------------

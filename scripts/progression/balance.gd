@@ -70,6 +70,32 @@ const WET_FLOORS_RADIUS := 0.9             # metres
 const WET_FLOORS_CONTROL := 0.2            # LOWER is worse: control (acceleration and braking) while standing in one
 
 
+# --- Handling: how it feels to move and to carry ------------------------------------------
+## Every character shares one controller, so these apply to all of them. If it feels floaty:
+## raise PLAYER_BRAKING (stops sooner), raise CARRY_STIFFNESS (the item keeps up with you),
+## raise HELD_ANGULAR_DAMP (it swings less) or raise HOLD_GRAVITY_SCALE (it floats less).
+
+## Walking. Acceleration and braking are m/s per second; the top speed is 5 m/s.
+const PLAYER_ACCELERATION := 20.0
+const PLAYER_BRAKING := 16.0
+## Below 1 makes reversing direction sluggish (and can cause a stumble at speed).
+const REVERSAL_PENALTY := 0.8
+## While carrying, how fast you speed up and brake scales between this and 1.0 by how
+## little the load slows you. 1.0 = carrying never dulls the controls.
+const CARRY_RESPONSE_FLOOR := 0.85
+
+## The spring that pulls a held item to the player. Critical damping (no bounce, no lag)
+## is 2 * sqrt(stiffness), so keep CARRY_DAMPING at or just above that.
+const CARRY_STIFFNESS := 90.0
+const CARRY_DAMPING := 19.0
+## Cap (m/s^2) on how hard that spring can accelerate an item.
+const MAX_CARRY_ACCEL := 70.0
+## Gravity on a fully lifted item (1.0 = full weight; lower floats). And rotational drag
+## while held (higher = less swing).
+const HOLD_GRAVITY_SCALE := 0.85
+const HELD_ANGULAR_DAMP := 7.0
+
+
 # --- Solo play ------------------------------------------------------------------------
 
 ## One player can do every job. When a single player is the whole team, a two-player item can
