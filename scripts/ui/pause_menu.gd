@@ -4,7 +4,7 @@ extends CanvasLayer
 ## keeps simulating for everyone, so it only covers this player's screen.
 ##
 ## Driven by Godot's UI focus like the other cards (d-pad or arrows, A or Enter, mouse),
-## so keyboards and gamepads both work. Esc goes back a page, then closes. Leaving a game
+## so keyboards and gamepads both work. Esc or gamepad B goes back a page, then closes. Leaving a game
 ## or quitting asks first, with the safe choice focused.
 
 const CARD_WIDTH := 1300.0
@@ -39,9 +39,12 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	var pad := event as InputEventJoypadButton
-	var pressed := (key != null and key.pressed and not key.echo and key.keycode == KEY_ESCAPE) \
+	var toggle := (key != null and key.pressed and not key.echo and key.keycode == KEY_ESCAPE) \
 		or (pad != null and pad.pressed and pad.button_index == JOY_BUTTON_START)
-	if not pressed:
+	# Once open, B (ui_cancel) goes back like Esc. Closed, B must not open the menu: in play
+	# it is heave-ho.
+	var back := _is_open and event.is_action_pressed("ui_cancel")
+	if not toggle and not back:
 		return
 	get_viewport().set_input_as_handled()
 	if not _is_open:

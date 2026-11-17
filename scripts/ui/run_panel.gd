@@ -13,6 +13,7 @@ signal deleted(slot: int)
 
 var _slot := 0
 var _content: VBoxContainer
+var _confirming := false   # on the "Delete?" page, so back returns to the details
 
 
 func _ready() -> void:
@@ -45,13 +46,16 @@ func close() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	var key := event as InputEventKey
-	if visible and key and key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
-		close()
+	if visible and event.is_action_pressed("ui_cancel"):   # Esc or gamepad B
+		if _confirming:
+			_show_details()   # back out of "Delete?" without losing the card
+		else:
+			close()
 		get_viewport().set_input_as_handled()
 
 
 func _show_details() -> void:
+	_confirming = false
 	_clear()
 	var state := SaveManager.peek_run(_slot)
 	assert(state != null, "RunPanel opened for empty slot %d" % _slot)
@@ -84,6 +88,7 @@ func _show_details() -> void:
 
 
 func _show_confirm() -> void:
+	_confirming = true
 	_clear()
 	var state := SaveManager.peek_run(_slot)
 	assert(state != null, "RunPanel confirm for empty slot %d" % _slot)

@@ -50,8 +50,7 @@ func close() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	var key := event as InputEventKey
-	if visible and key and key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
+	if visible and event.is_action_pressed("ui_cancel"):   # Esc or gamepad B
 		close()
 		get_viewport().set_input_as_handled()
 
