@@ -179,8 +179,8 @@ func _device_card(title: String, source: int, description: String, card_width: f
 	column.add_theme_constant_override("separation", UIKit.SPACE_S)
 	card.add_child(column)
 	column.add_child(UIKit.label(title, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
-	var illustration_width := minf(card_width - 80.0, 620.0)
-	column.add_child(UIKit.device_image(source, Vector2(illustration_width, 210)))
+	var illustration_width := minf(card_width - 80.0, 520.0)
+	column.add_child(UIKit.device_image(source, Vector2(illustration_width, illustration_width * 0.55)))
 	var caption := UIKit.label(description, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(caption)
