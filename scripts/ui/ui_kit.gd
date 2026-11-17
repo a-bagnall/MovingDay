@@ -335,30 +335,19 @@ static func style_label3d(label: Label3D) -> void:
 	label.outline_modulate = BROWN_DARK
 
 
-## Controller or keyboard artwork for the currently assigned input source.
-## Unknown controllers use the minimal universal illustration.
-static func device_texture(source: int) -> Texture2D:
-	var path := "controller_minimal.png"
-	match _controller_family(source):
-		"keyboard":
-			path = "kb_dark_all.png"
-		"playstation":
-			path = "controller_ps.png"
-		"switch":
-			path = "controller_switch.png"
-		"xbox":
-			path = "controller_xbox.png"
-	return load(INPUT_ART + path) as Texture2D
-
-
-## A consistently sized, aspect-preserving device illustration.
-static func device_image(source: int, image_size: Vector2 = Vector2(560, 240)) -> TextureRect:
-	var image := TextureRect.new()
-	image.texture = device_texture(source)
+## Crisp, resolution-independent device artwork for the controls guide.
+static func device_image(source: int, image_size: Vector2 = Vector2(560, 240)) -> Control:
+	var image_script := preload("res://scripts/ui/device_icon.gd")
+	var image := image_script.new() as Control
 	image.custom_minimum_size = image_size
-	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if source == InputSetup.KB_WASD:
+		image.device_kind = "keyboard"
+		image.keyboard_layout = "wasd"
+	elif source == InputSetup.KB_ARROWS:
+		image.device_kind = "keyboard"
+		image.keyboard_layout = "arrows"
+	else:
+		image.device_kind = "controller"
 	return image
 
 
