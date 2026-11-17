@@ -53,6 +53,24 @@ const PING_COOLDOWN := 0.8
 const PING_REACH := 2.2
 const PING_ITEM_SNAP := 1.4
 var _idle_time := 0.0
+var _prev_yaw := 0.0        # last frame's facing, to tell how fast the body is turning
+var _turn_blend := 0.0      # 0..1 while turning on the spot (drives the little pivot steps)
+var _lead := 0.0            # how far the legs are turned toward the direction of travel
+var _going_back := false    # moving against the facing; sticky so it does not flicker at the edge
+
+## Rig bones, by name suffix. `Hub001` is the Bunny's pelvis: the other plushies call theirs
+## `Hips`, and without the alias the Bunny's pelvis never moved at all.
+const RIG_KEYS := ["LLeg1", "RLeg1", "LLeg2", "RLeg2", "LLegAnkle", "RLegAnkle", "LArm1", "RArm1", "LArm2", "RArm2", "Head", "Chest", "Hips"]
+const RIG_ALIASES := {"Hub001": "Hips", "Hub_001": "Hips"}
+## Bones that say where a character stands (see _stance_point).
+const HIP_BONES := ["Hips", "Hub001", "Hub_001"]
+const FOOT_BONES := ["LLegAnkle", "RLegAnkle", "Foot.L", "Foot.R", "Foot_L", "Foot_R"]   # the importer may swap "." for "_"
+## Legs turn toward the direction of travel by at most this much (radians); the chest takes
+## back this share of it so the upper body keeps facing where the player aims.
+const LEAD_MAX := 1.3
+const LEAD_CHEST := 0.85
+## How big the pivot steps are when turning on the spot, as a share of a full walking stride.
+const TURN_STEP_AMOUNT := 0.4
 
 @export_group("Movement")
 @export var max_speed: float = 5.0
@@ -393,8 +411,64 @@ func _attach_character(index: int) -> bool:
 	_char_root = root
 	_char_yaw = float(entry["yaw"])
 	root.rotation.y = _char_yaw
+	_centre_on_stance(model, root, entry)
+	_prev_yaw = _visual.rotation.y
 	_setup_animations(model)
 	return true
+
+
+## The point on the ground this character stands and turns on: halfway between the hips and
+## the middle of the feet, read from the skeleton's rest pose through the real node
+## transforms, so it holds whatever the importer did to the model. The result is in
+## `_visual` space with y = 0, or a non-finite vector when the model has no usable bones.
+func _stance_point(model: Node3D) -> Vector3:
+	var none := Vector3(INF, INF, INF)
+	var skeletons := model.find_children("*", "Skeleton3D", true, false)
+	if skeletons.is_empty():
+		return none
+	var skeleton := skeletons[0] as Skeleton3D
+	var to_visual := _visual.global_transform.affine_inverse() * skeleton.global_transform
+	var hip_sum := Vector3.ZERO
+	var hip_count := 0
+	var foot_sum := Vector3.ZERO
+	var foot_count := 0
+	for i in skeleton.get_bone_count():
+		var bone_name := skeleton.get_bone_name(i)
+		var at := to_visual * skeleton.get_bone_global_rest(i).origin
+		for suffix: String in HIP_BONES:
+			if bone_name.ends_with(suffix):
+				hip_sum += at
+				hip_count += 1
+		for suffix: String in FOOT_BONES:
+			if bone_name.ends_with(suffix):
+				foot_sum += at
+				foot_count += 1
+	var points: Array[Vector3] = []
+	if hip_count > 0:
+		points.append(hip_sum / hip_count)
+	if foot_count > 0:
+		points.append(foot_sum / foot_count)
+	if points.is_empty():
+		return none
+	var mean := Vector3.ZERO
+	for point in points:
+		mean += point
+	mean /= points.size()
+	return Vector3(mean.x, 0.0, mean.z)
+
+
+## Slides the model so its stance point sits exactly on the player's axis (the capsule and
+## the colour ring), which is what the whole visual turns about. Without this the body swings
+## around some other point when the right stick turns the player on the spot. A catalogue
+## entry may add a `nudge` (metres, x right, z back) if a model still looks off.
+func _centre_on_stance(model: Node3D, root: Node3D, entry: Dictionary) -> void:
+	var stance := _stance_point(model)
+	if not stance.is_finite():
+		return
+	var nudge: Vector2 = entry.get("nudge", Vector2.ZERO)
+	var shift := Vector3(nudge.x, 0.0, nudge.y) - stance      # in _visual space
+	model.position += root.basis.inverse() * shift            # the model lives in root's space
+	print("[Character] %s: centred on its stance, moved %.1f cm" % [entry["name"], shift.length() * 100.0])
 
 
 ## Models that ship with animations (the robot) use them; the rest are animated
@@ -434,20 +508,40 @@ func _build_rig(skeleton: Skeleton3D) -> void:
 	_skeleton = skeleton
 	for i in skeleton.get_bone_count():
 		var bone_name := skeleton.get_bone_name(i)
-		for key in ["LLeg1", "RLeg1", "LLeg2", "RLeg2", "LLegAnkle", "RLegAnkle", "LArm1", "RArm1", "LArm2", "RArm2", "Head", "Chest", "Hips"]:
-			if bone_name.ends_with(key):
-				var parent := skeleton.get_bone_parent(i)
-				var rest := skeleton.get_bone_global_rest(i)
-				var parent_basis := Basis.IDENTITY if parent < 0 else skeleton.get_bone_global_rest(parent).basis.orthonormalized()
-				_rig[key] = {
-					"bone": i,
-					"rest_rot": skeleton.get_bone_rest(i).basis.get_rotation_quaternion(),
-					"parent_basis": parent_basis,
-					"global_basis": rest.basis.orthonormalized(),
-					"side": signf(rest.origin.x) if signf(rest.origin.x) != 0.0 else 1.0,
-					# Height of this bone above the floor in the rest pose (used by _ground_lock).
-					"rest_y": (_visual.global_transform.affine_inverse() * (skeleton.global_transform * rest.origin)).y,
-				}
+		var key := ""
+		for candidate: String in RIG_KEYS:
+			if bone_name.ends_with(candidate):
+				key = candidate
+				break
+		if key.is_empty():
+			for alias: String in RIG_ALIASES:
+				if bone_name.ends_with(alias):
+					key = String(RIG_ALIASES[alias])
+					break
+		if key.is_empty():
+			continue
+		_rig[key] = _rig_entry(skeleton, i)
+	# Whatever the pelvis is called, it is the bone both upper legs hang from.
+	if not _rig.has("Hips") and _rig.has("LLeg1") and _rig.has("RLeg1"):
+		var pelvis := skeleton.get_bone_parent(int(_rig["LLeg1"]["bone"]))
+		if pelvis >= 0 and pelvis == skeleton.get_bone_parent(int(_rig["RLeg1"]["bone"])):
+			_rig["Hips"] = _rig_entry(skeleton, pelvis)
+
+
+## What _pose_bone needs to know about bone `i`, from the rest pose.
+func _rig_entry(skeleton: Skeleton3D, i: int) -> Dictionary:
+	var parent := skeleton.get_bone_parent(i)
+	var rest := skeleton.get_bone_global_rest(i)
+	var parent_basis := Basis.IDENTITY if parent < 0 else skeleton.get_bone_global_rest(parent).basis.orthonormalized()
+	return {
+		"bone": i,
+		"rest_rot": skeleton.get_bone_rest(i).basis.get_rotation_quaternion(),
+		"parent_basis": parent_basis,
+		"global_basis": rest.basis.orthonormalized(),
+		"side": signf(rest.origin.x) if signf(rest.origin.x) != 0.0 else 1.0,
+		# Height of this bone above the floor in the rest pose (used by _ground_lock).
+		"rest_y": (_visual.global_transform.affine_inverse() * (skeleton.global_transform * rest.origin)).y,
+	}
 
 
 ## Rotates a bone by `delta` (a rotation in the model's own axes: X is side to side,
@@ -473,12 +567,20 @@ func _animate_character(delta: float) -> void:
 		return
 	var speed := Vector2(velocity.x, velocity.z).length()
 	var moving := speed > 0.4
+	# How fast the body is turning on the spot (right stick), 0 when walking or still.
+	var yaw := _visual.rotation.y
+	var yaw_rate := absf(wrapf(yaw - _prev_yaw, -PI, PI)) / maxf(delta, 0.0001)
+	_prev_yaw = yaw
+	var turn_target := 0.0 if moving else clampf((yaw_rate - 0.6) / 3.0, 0.0, 1.0)
+	_turn_blend = lerpf(_turn_blend, turn_target, 1.0 - exp(-10.0 * delta))
 	if _anim:
-		var want := _anim_walk if moving else _anim_idle
+		# Baked clips: walk in place while turning on the spot, so the feet are not frozen.
+		var stepping := moving or _turn_blend > 0.35
+		var want := _anim_walk if stepping else _anim_idle
 		if want != _anim_current:
 			_anim.play(want, 0.2)
 			_anim_current = want
-		_anim.speed_scale = clampf(speed / max_speed, 0.75, 1.05) if moving else 1.0
+		_anim.speed_scale = clampf(speed / max_speed, 0.75, 1.05) if moving else (0.8 if stepping else 1.0)
 		return
 
 	var style: Dictionary = CharacterCatalog.ENTRIES[CharacterCatalog.clamp_index(character)]["style"]
@@ -492,6 +594,7 @@ func _animate_character(delta: float) -> void:
 	var s_nod: float = style.get("nod", 1.0)
 	var in_sync: bool = style.get("sync", false)
 	var s_swagger: float = style.get("swagger", 0.0)
+	var s_turn: float = style.get("turn", 1.0)
 
 	var amount := clampf(speed / max_speed, 0.0, 1.0) if moving else 0.0
 	_walk_blend = lerpf(_walk_blend, amount, 1.0 - exp(-10.0 * delta))
@@ -500,13 +603,35 @@ func _animate_character(delta: float) -> void:
 	_lift_blend = lerpf(_lift_blend, 1.0 if (held_furniture != null and (input.lift or _throwing)) else 0.0, 1.0 - exp(-12.0 * delta))
 	_carry_blend = lerpf(_carry_blend, carry_target, 1.0 - exp(-9.0 * delta))
 	var step_rate := lerpf(7.0, 13.0, _walk_blend) * s_rate
-	# Walking backwards (facing one way, moving the other) runs the step cycle in reverse.
-	var along := Vector3(velocity.x, 0.0, velocity.z).dot(get_facing())
-	var direction := -1.0 if (moving and along < -0.25 * speed) else 1.0
-	_anim_time += delta * (step_rate * direction if _walk_blend > 0.05 else 2.0)   # one cycle = two steps
+	# Which way is the body travelling compared with the way it faces? (With the right stick
+	# these differ.) `rel` is that angle; against the facing the step cycle runs in reverse.
+	var rel := 0.0
+	if moving:
+		rel = wrapf(atan2(-velocity.x, -velocity.z) - _visual.rotation.y, -PI, PI)
+		var c := cos(rel)
+		_going_back = c < 0.1 if _going_back else c < -0.45
+	else:
+		_going_back = false
+	var direction := -1.0 if _going_back else 1.0
+	var turning := _turn_blend * s_turn
+	if _walk_blend > 0.05:
+		_anim_time += delta * step_rate * direction     # one cycle = two steps
+	elif turning > 0.05:
+		_anim_time += delta * 9.0 * s_rate              # little pivot steps while turning on the spot
+	else:
+		_anim_time += delta * 2.0
 	_idle_time += delta
 
+	# Legs line up with the direction of travel and the upper body keeps facing the aim, so
+	# strafing and walking backwards read as steps rather than the whole body sliding.
+	var lead_target := 0.0
+	if moving:
+		var lead := rel if direction > 0.0 else wrapf(rel + PI, -PI, PI)
+		lead_target = clampf(lead, -LEAD_MAX, LEAD_MAX) * (1.0 - 0.6 * _carry_blend)
+	_lead = lerp_angle(_lead, lead_target, 1.0 - exp(-12.0 * delta))
+
 	var w := _walk_blend
+	var leg_amount := maxf(w, turning * TURN_STEP_AMOUNT)
 	var swing := sin(_anim_time)
 	# `hop` is 0 when the body is at its lowest and 1 at its highest. The legs and the
 	# ground lock below already make the body dip on each step; this adds the cartoon
@@ -571,8 +696,8 @@ func _animate_character(delta: float) -> void:
 	var knee_style: float = style.get("knee", 1.0)
 	var phase_l := _anim_time
 	var phase_r := _anim_time if in_sync else _anim_time + PI
-	var pose_l := _leg_pose(phase_l, leg_style, knee_style, w)
-	var pose_r := _leg_pose(phase_r, leg_style, knee_style, w)
+	var pose_l := _leg_pose(phase_l, leg_style, knee_style, leg_amount)
+	var pose_r := _leg_pose(phase_r, leg_style, knee_style, leg_amount)
 	_pose_bone("LLeg1", Basis(Vector3.RIGHT, pose_l.x))
 	_pose_bone("RLeg1", Basis(Vector3.RIGHT, pose_r.x))
 	_pose_bone("LLeg2", Basis(Vector3.RIGHT, pose_l.y))
@@ -586,7 +711,7 @@ func _animate_character(delta: float) -> void:
 	# Swagger: the hip on the planted leg pops up and out, the pelvis turns further, and the
 	# shoulders sway the other way so the whole walk reads as a strut.
 	var hip_roll := swing * (0.05 + 0.09 * s_swagger) * w * (0.0 if in_sync else 1.0)
-	_pose_bone("Hips", Basis(Vector3.UP, -hip_cos * (0.10 + 0.05 * s_swagger) * twist_amount * w)
+	_pose_bone("Hips", Basis(Vector3.UP, _lead - hip_cos * (0.10 + 0.05 * s_swagger) * twist_amount * w)
 		* Basis(Vector3.BACK, hip_roll))
 	_ground_lock(bob)
 	# Arms: hang down from the plushie T-pose, swing against the legs, bend at the
@@ -606,10 +731,10 @@ func _animate_character(delta: float) -> void:
 		_pose_bone("LArm2" if is_left else "RArm2", Basis(Vector3.RIGHT, -elbow))
 	# Head: keeps level against the waddle, bobs along a beat behind the body.
 	var nod := sin(_anim_time * 2.0 - 0.9) * 0.035 * minf(s_nod, 1.0) * w
-	_pose_bone("Head", Basis(Vector3.UP, head_look) * Basis(Vector3.BACK, head_tilt - roll * 0.6 + sin(_idle_time * 1.3 + 1.0) * 0.1 * idle)
+	_pose_bone("Head", Basis(Vector3.UP, head_look - _lead * (1.0 - LEAD_CHEST)) * Basis(Vector3.BACK, head_tilt - roll * 0.6 + sin(_idle_time * 1.3 + 1.0) * 0.1 * idle)
 		* Basis(Vector3.RIGHT, head_pitch - bob * 1.5 + nod))
 	# Chest: counter-twist as the hips swing, and a breath.
-	_pose_bone("Chest", Basis(Vector3.UP, hip_cos * (0.08 + 0.05 * s_swagger) * twist_amount * w)
+	_pose_bone("Chest", Basis(Vector3.UP, hip_cos * (0.08 + 0.05 * s_swagger) * twist_amount * w - _lead * LEAD_CHEST)
 		* Basis(Vector3.BACK, -swing * 0.07 * s_swagger * w)
 		* Basis(Vector3.RIGHT, sin(_idle_time * 2.2) * 0.02 * idle))
 

@@ -5,7 +5,18 @@ Goal: characters that walk like they have real legs (hips swing, knees bend, fee
 plant and lift) while keeping a cartoony, bouncy, plushie feel. Each animal should
 still move differently from the others.
 
-This is a plan only. Nothing here is implemented yet.
+STATUS (updated 2026-11-17)
+- M1 mostly done: knee-bending walk cycle with hip, knee and ankle, body lowered by a
+  ground lock, hip sway and pelvis yaw (Player._leg_pose, _ground_lock).
+- M3 started: the legs now turn toward the direction of travel while the chest and head keep
+  facing the aim (right stick), and characters take small pivot steps when turning on the
+  spot. The Robot walks its baked clip in place while turning.
+- Character placement: every character is centred on its stance (hips and feet) measured from
+  the rig at runtime, so it turns about the player's own axis (Player._centre_on_stance).
+- Bunny: its pelvis bone is called Hub001, not Hips, so the pelvis, hip roll and swagger never
+  applied until the rig lookup learnt the alias.
+- Not started: M0 test harness, M2 speed-matched stride and foot planting, M4 to M8.
+- Still open: the Robot cannot lead with its legs while strafing (baked clips).
 
 
 1. WHERE WE ARE TODAY

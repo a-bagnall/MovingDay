@@ -10,7 +10,12 @@ class_name CharacterCatalog
 ## `style` shapes the procedural animation so each plushie moves differently (see
 ## Player._animate_character): rate (step speed), bob (hop height), roll (waddle), leg/arm
 ## (swing), twist (hip sway), nod (head bob), knee (bend, default 1), swagger (extra hip pop and
-## shoulder counter-sway, default 0), sync (both legs together; unused now, bipedal for all).
+## shoulder counter-sway, default 0), turn (size of the pivot steps when turning on the spot,
+## default 1, 0 = none), sync (both legs together; unused now, bipedal for all).
+##
+## Every character is centred on its stance (halfway between hips and feet, measured from the
+## rig at runtime, see Player._centre_on_stance) so it turns about the player's own axis.
+## An entry can add `"nudge": Vector2(x, z)` (metres, x right, z back) if one still looks off.
 const ENTRIES: Array[Dictionary] = [
 	{"name": "Bear", "path": "res://assets/characters/Animal Plushies/FBX/Bear.fbx", "height": 0.72, "yaw": PI, "style": {"rate": 0.8, "bob": 0.8, "roll": 1.5, "leg": 0.8, "arm": 0.7, "twist": 1.0, "nod": 0.6}},
 	{"name": "Bunny", "path": "res://assets/characters/Animal Plushies/FBX/Bunny.fbx", "height": 0.82, "yaw": PI, "style": {"rate": 0.8, "bob": 1.9, "roll": 0.3, "leg": 1.0, "arm": 1.0, "twist": 1.2, "nod": 1.5, "knee": 1.15, "swagger": 1.0}},
