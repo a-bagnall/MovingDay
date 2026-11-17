@@ -253,13 +253,15 @@ func _update_text() -> void:
 	var remote := NetworkManager.remote_player_ids()
 	for player_id in range(1, InputSetup.MAX_PLAYERS + 1):
 		if InputSetup.local_player_ids().has(player_id):
-			lines.append("Player %d: %s" % [player_id, InputSetup.describe(InputSetup.source_of(player_id))])
+			lines.append("Player %d: %s" % [player_id, InputSetup.short_name(InputSetup.source_of(player_id))])
 		elif remote.has(player_id):
 			lines.append("Player %d: online" % player_id)
 		else:
 			lines.append("Player %d: waiting..." % player_id)
 	for source in _held:
-		lines.append("Joining: %s %d%%" % [InputSetup.describe(source), roundi(_held[source] / HOLD_TIME * 100.0)])
+		lines.append("Joining: %s %d%%" % [InputSetup.short_name(source), roundi(_held[source] / HOLD_TIME * 100.0)])
+	lines.append("")
+	lines.append("Esc or Start: controls, settings, quit")
 	_status.text = "\n".join(lines)
 
 

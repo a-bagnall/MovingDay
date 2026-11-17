@@ -43,6 +43,11 @@ const SPACE_L := 32
 ## Motion. Short and ease-out, so screens settle instead of popping.
 const FADE_TIME := 0.25
 
+## Screen edges kept clear of UI (about 4% of the screen, authored units) so nothing
+## is clipped by a TV's overscan or sits hard against the window edge.
+const SAFE_X := 120
+const SAFE_Y := 72
+
 const FONT_SMALL := 40
 const FONT_BODY := 52
 const FONT_BIG := 76
@@ -111,12 +116,25 @@ static func chip(text: String, color: Color = PINK) -> PanelContainer:
 ## Fades a screen in so it settles rather than pops. Does nothing outside the tree
 ## (a tween cannot run there), so it is always safe to call.
 static func fade_in(node: CanvasItem, duration: float = FADE_TIME) -> void:
-	if not node.is_inside_tree():
+	if not node.is_inside_tree() or GameSettings.reduce_motion:
 		return
 	node.modulate.a = 0.0
 	var tween := node.create_tween()
 	tween.tween_property(node, "modulate:a", 1.0, duration) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+## A full-screen container inset by the safe area. Put a screen's layout inside it.
+static func safe_area(root: Control) -> MarginContainer:
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_theme_constant_override("margin_left", SAFE_X)
+	margin.add_theme_constant_override("margin_right", SAFE_X)
+	margin.add_theme_constant_override("margin_top", SAFE_Y)
+	margin.add_theme_constant_override("margin_bottom", SAFE_Y)
+	root.add_child(margin)
+	return margin
 
 
 ## The wide wooden title banner every screen opens with.

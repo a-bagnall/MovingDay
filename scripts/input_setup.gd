@@ -85,6 +85,17 @@ func available_sources() -> Array[int]:
 	return out
 
 
+## Short label for rosters: the full bindings live on the pause menu's Controls page.
+func short_name(source: int) -> String:
+	match source:
+		KB_WASD:
+			return "Keyboard (WASD)"
+		KB_ARROWS:
+			return "Keyboard (arrows)"
+		_:
+			return Input.get_joy_name(source)
+
+
 func describe(source: int) -> String:
 	match source:
 		KB_WASD:

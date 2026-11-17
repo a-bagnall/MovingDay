@@ -146,12 +146,7 @@ func _build_hud(title: String) -> Label:
 	add_child(layer)
 	var root := UIKit.setup(layer)
 
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 40)
-	root.add_child(margin)
+	var margin := UIKit.safe_area(root)
 
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE

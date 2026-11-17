@@ -52,12 +52,7 @@ func setup(delivery_zone: DeliveryZone, items: Array[Furniture], job_contract: C
 func _build_ui() -> void:
 	_root = UIKit.setup(self)
 
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for side in ["left", "top", "right", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 40)
-	_root.add_child(margin)
+	var margin := UIKit.safe_area(_root)
 
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
