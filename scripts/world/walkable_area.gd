@@ -165,7 +165,7 @@ func _build_hud(title: String) -> Label:
 	note.theme_type_variation = &"NotePanel"
 	note.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	var note_content := VBoxContainer.new()
-	note_content.add_theme_constant_override("separation", UIKit.SPACE_XS)
+	note_content.add_theme_constant_override("separation", UIKit.SPACE_S)
 	note.add_child(note_content)
 	note_content.add_child(UIKit.label("ROOM CONTROLS", UIKit.FONT_SMALL,
 		HORIZONTAL_ALIGNMENT_LEFT, &"MutedLabel"))
