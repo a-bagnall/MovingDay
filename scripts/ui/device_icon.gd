@@ -1,4 +1,5 @@
 extends Control
+class_name DeviceIcon
 ## Crisp, scalable device illustrations for the controls guide.
 ## Drawn in code rather than stretched sprite-sheet artwork, so every window size
 ## gets clean edges and the highlighted keys are always legible.
