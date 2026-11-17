@@ -194,23 +194,11 @@ func _show_settings() -> void:
 		GameSettings.windowed_resolution = DisplayServer.window_get_size()
 	_content.add_child(UIKit.label("SETTINGS", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
 
-	var volume_row := _row("Master volume")
-	var volume_value := UIKit.label("%d%%" % roundi(GameSettings.master_volume * 100.0), UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_RIGHT)
-	volume_value.custom_minimum_size.x = 180
-	var volume_slider := HSlider.new()
-	volume_slider.min_value = 0.0
-	volume_slider.max_value = 1.0
-	volume_slider.step = 0.05
-	volume_slider.value = GameSettings.master_volume
-	volume_slider.custom_minimum_size = Vector2(560, 64)
-	volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	volume_slider.value_changed.connect(func(value: float) -> void:
-		GameSettings.master_volume = value
-		GameSettings.apply()
-		GameSettings.save()
-		volume_value.text = "%d%%" % roundi(value * 100.0))
-	volume_row.add_child(volume_slider)
-	volume_row.add_child(volume_value)
+	_add_volume_slider("Master volume", "master")
+	_add_volume_slider("Music", "Music")
+	_add_volume_slider("Sound effects", "SFX")
+	_add_volume_slider("Interface sounds", "UI")
+	_add_volume_slider("Ambience", "Ambience")
 
 	var mode_row := _row("Display mode")
 	var mode_picker := OptionButton.new()
@@ -323,6 +311,26 @@ func _add_toggle(title: String, value: bool, setter: Callable) -> void:
 		holder[0].text = _on_off(state[0]), false, 340)
 	holder.append(button)
 	_row(title).add_child(button)
+
+
+func _add_volume_slider(title: String, bus_name: String) -> void:
+	var row := _row(title)
+	var value := GameSettings.get_volume(bus_name)
+	var value_label := UIKit.label("%d%%" % roundi(value * 100.0), UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_RIGHT)
+	value_label.custom_minimum_size.x = 180
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.value = value
+	slider.custom_minimum_size = Vector2(560, 64)
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.value_changed.connect(func(new_value: float) -> void:
+		GameSettings.set_volume(bus_name, new_value)
+		GameSettings.save()
+		value_label.text = "%d%%" % roundi(new_value * 100.0))
+	row.add_child(slider)
+	row.add_child(value_label)
 
 
 func _set_fullscreen(value: bool) -> void:
