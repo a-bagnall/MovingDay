@@ -15,7 +15,10 @@ func _ready() -> void:
 func _draw() -> void:
 	if size.x <= 0.0 or size.y <= 0.0:
 		return
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(size.x / 400.0, size.y / 220.0))
+	# Preserve the artwork's aspect ratio; centre it in the available card space.
+	var scale_factor := minf(size.x / 400.0, size.y / 220.0)
+	var offset := (size - Vector2(400.0, 220.0) * scale_factor) * 0.5
+	draw_set_transform(offset, 0.0, Vector2.ONE * scale_factor)
 	if device_kind == "controller":
 		_draw_controller()
 	else:
