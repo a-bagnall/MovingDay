@@ -159,13 +159,20 @@ func _build_hud(title: String) -> Label:
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(spacer)
 
+	# Keep the room guidance anchored to the left edge of the safe area.
+	# A compact note panel reads as part of the same UI system as the other cards.
 	var note := PanelContainer.new()
 	note.theme_type_variation = &"NotePanel"
-	note.size_flags_horizontal = Control.SIZE_SHRINK_END
+	note.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var note_content := VBoxContainer.new()
+	note_content.add_theme_constant_override("separation", UIKit.SPACE_XS)
+	note.add_child(note_content)
+	note_content.add_child(UIKit.label("ROOM CONTROLS", UIKit.FONT_SMALL,
+		HORIZONTAL_ALIGNMENT_LEFT, &"MutedLabel"))
 	var status := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel")
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status.custom_minimum_size.x = 1800   # fixed width so long lines wrap instead of overflowing
-	note.add_child(status)
+	status.custom_minimum_size.x = 720
+	note_content.add_child(status)
 	column.add_child(note)
 	return status
 
