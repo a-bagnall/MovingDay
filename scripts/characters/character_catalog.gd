@@ -9,11 +9,11 @@ class_name CharacterCatalog
 
 ## `style` shapes the procedural animation so each plushie moves differently (see
 ## Player._animate_character): rate (step speed), bob (hop height), roll (waddle), leg/arm
-## (swing), twist (hip sway), nod (head bob), knee (bend, default 1), sync (both legs together,
-## like a bunny).
+## (swing), twist (hip sway), nod (head bob), knee (bend, default 1), swagger (extra hip pop and
+## shoulder counter-sway, default 0), sync (both legs together; unused now, bipedal for all).
 const ENTRIES: Array[Dictionary] = [
 	{"name": "Bear", "path": "res://assets/characters/Animal Plushies/FBX/Bear.fbx", "height": 0.72, "yaw": PI, "style": {"rate": 0.8, "bob": 0.8, "roll": 1.5, "leg": 0.8, "arm": 0.7, "twist": 1.0, "nod": 0.6}},
-	{"name": "Bunny", "path": "res://assets/characters/Animal Plushies/FBX/Bunny.fbx", "height": 0.82, "yaw": PI, "style": {"rate": 0.75, "bob": 1.9, "roll": 0.3, "leg": 0.9, "arm": 0.9, "twist": 0.3, "nod": 1.5, "sync": true}},
+	{"name": "Bunny", "path": "res://assets/characters/Animal Plushies/FBX/Bunny.fbx", "height": 0.82, "yaw": PI, "style": {"rate": 0.8, "bob": 1.9, "roll": 0.3, "leg": 1.0, "arm": 1.0, "twist": 1.2, "nod": 1.5, "knee": 1.15, "swagger": 1.0}},
 	{"name": "Cat", "path": "res://assets/characters/Animal Plushies/FBX/Cat.fbx", "height": 0.77, "yaw": PI, "style": {"rate": 1.0, "bob": 0.45, "roll": 0.4, "leg": 1.0, "arm": 0.5, "twist": 2.2, "nod": 0.3}},
 	{"name": "Dog", "path": "res://assets/characters/Animal Plushies/FBX/Dog.fbx", "height": 0.77, "yaw": PI, "style": {"rate": 1.25, "bob": 1.2, "roll": 0.8, "leg": 1.1, "arm": 1.1, "twist": 0.8, "nod": 2.2}},
 	{"name": "Robot", "path": "res://assets/characters/Animated Robot by Quaternius/FBX/Robot.fbx", "height": 1.2, "yaw": PI, "style": {}},

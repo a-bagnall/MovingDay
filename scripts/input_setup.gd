@@ -8,6 +8,8 @@ const KB_WASD := -1
 const KB_ARROWS := -2
 const MAX_PLAYERS := 4
 const JOY_DEADZONE := 0.2
+## The right stick must be pushed further than the left one before it turns the player.
+const AIM_DEADZONE := 0.35
 
 ## Buttons beyond movement and interact. Lift is held; Action and Ping are pressed.
 const BUTTONS := ["lift", "action", "ping", "heave"]
@@ -85,17 +87,6 @@ func available_sources() -> Array[int]:
 	return out
 
 
-## Short label for rosters: the full bindings live on the pause menu's Controls page.
-func short_name(source: int) -> String:
-	match source:
-		KB_WASD:
-			return "Keyboard (WASD)"
-		KB_ARROWS:
-			return "Keyboard (arrows)"
-		_:
-			return Input.get_joy_name(source)
-
-
 func describe(source: int) -> String:
 	match source:
 		KB_WASD:
@@ -170,6 +161,17 @@ func get_move(source: int) -> Vector2:
 		Input.get_joy_axis(source, JOY_AXIS_LEFT_X),
 		Input.get_joy_axis(source, JOY_AXIS_LEFT_Y))
 	return stick.limit_length(1.0) if stick.length() > JOY_DEADZONE else Vector2.ZERO
+
+
+## Where the right stick points (x right, y down on screen), or zero inside the dead zone.
+## Gamepads only: it sets which way the player faces. Keyboards have no aim.
+func get_aim(source: int) -> Vector2:
+	if source < 0 or ui_captured:
+		return Vector2.ZERO
+	var stick := Vector2(
+		Input.get_joy_axis(source, JOY_AXIS_RIGHT_X),
+		Input.get_joy_axis(source, JOY_AXIS_RIGHT_Y))
+	return stick.limit_length(1.0) if stick.length() > AIM_DEADZONE else Vector2.ZERO
 
 
 func is_interact_pressed(source: int) -> bool:

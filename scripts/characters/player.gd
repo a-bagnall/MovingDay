@@ -491,6 +491,7 @@ func _animate_character(delta: float) -> void:
 	var s_twist: float = style.get("twist", 1.0)
 	var s_nod: float = style.get("nod", 1.0)
 	var in_sync: bool = style.get("sync", false)
+	var s_swagger: float = style.get("swagger", 0.0)
 
 	var amount := clampf(speed / max_speed, 0.0, 1.0) if moving else 0.0
 	_walk_blend = lerpf(_walk_blend, amount, 1.0 - exp(-10.0 * delta))
@@ -499,7 +500,10 @@ func _animate_character(delta: float) -> void:
 	_lift_blend = lerpf(_lift_blend, 1.0 if (held_furniture != null and (input.lift or _throwing)) else 0.0, 1.0 - exp(-12.0 * delta))
 	_carry_blend = lerpf(_carry_blend, carry_target, 1.0 - exp(-9.0 * delta))
 	var step_rate := lerpf(7.0, 13.0, _walk_blend) * s_rate
-	_anim_time += delta * (step_rate if _walk_blend > 0.05 else 2.0)   # one cycle = two steps
+	# Walking backwards (facing one way, moving the other) runs the step cycle in reverse.
+	var along := Vector3(velocity.x, 0.0, velocity.z).dot(get_facing())
+	var direction := -1.0 if (moving and along < -0.25 * speed) else 1.0
+	_anim_time += delta * (step_rate * direction if _walk_blend > 0.05 else 2.0)   # one cycle = two steps
 	_idle_time += delta
 
 	var w := _walk_blend
@@ -579,8 +583,11 @@ func _animate_character(delta: float) -> void:
 	# the leg that is swinging through; the chest turns back so the shoulders stay square.
 	var hip_cos := cos(_anim_time)
 	var twist_amount := minf(s_twist, 1.6)
-	_pose_bone("Hips", Basis(Vector3.UP, -hip_cos * 0.10 * twist_amount * w)
-		* Basis(Vector3.BACK, swing * 0.05 * w * (0.0 if in_sync else 1.0)))
+	# Swagger: the hip on the planted leg pops up and out, the pelvis turns further, and the
+	# shoulders sway the other way so the whole walk reads as a strut.
+	var hip_roll := swing * (0.05 + 0.09 * s_swagger) * w * (0.0 if in_sync else 1.0)
+	_pose_bone("Hips", Basis(Vector3.UP, -hip_cos * (0.10 + 0.05 * s_swagger) * twist_amount * w)
+		* Basis(Vector3.BACK, hip_roll))
 	_ground_lock(bob)
 	# Arms: hang down from the plushie T-pose, swing against the legs, bend at the
 	# elbow, and rise to hold the furniture when carrying.
@@ -602,7 +609,8 @@ func _animate_character(delta: float) -> void:
 	_pose_bone("Head", Basis(Vector3.UP, head_look) * Basis(Vector3.BACK, head_tilt - roll * 0.6 + sin(_idle_time * 1.3 + 1.0) * 0.1 * idle)
 		* Basis(Vector3.RIGHT, head_pitch - bob * 1.5 + nod))
 	# Chest: counter-twist as the hips swing, and a breath.
-	_pose_bone("Chest", Basis(Vector3.UP, hip_cos * 0.08 * twist_amount * w)
+	_pose_bone("Chest", Basis(Vector3.UP, hip_cos * (0.08 + 0.05 * s_swagger) * twist_amount * w)
+		* Basis(Vector3.BACK, -swing * 0.07 * s_swagger * w)
 		* Basis(Vector3.RIGHT, sin(_idle_time * 2.2) * 0.02 * idle))
 
 
@@ -680,6 +688,7 @@ func _poll_input() -> void:
 	if not is_local:
 		return
 	input.move = InputSetup.get_move(_source)
+	input.aim = InputSetup.get_aim(_source)
 	input.interact = InputSetup.is_interact_pressed(_source)
 	input.lift = InputSetup.is_button_pressed(_source, "lift")
 	input.action = InputSetup.is_button_pressed(_source, "action")
@@ -718,7 +727,9 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= gravity * delta
 
 	if held_furniture:
-		_face_point(held_furniture.global_position, delta)
+		_face_point(held_furniture.global_position, delta)   # the item decides while carrying
+	elif input.aim.length() > 0.0 and not movement_locked:
+		_face_aim(input.aim, delta)
 	else:
 		_update_facing(horizontal, delta)
 	move_and_slide()
@@ -814,6 +825,13 @@ func _update_facing(horizontal: Vector3, delta: float) -> void:
 		return
 	var target_angle := atan2(-horizontal.x, -horizontal.z)
 	_visual.rotation.y = lerp_angle(_visual.rotation.y, target_angle, clampf(turn_speed * delta, 0.0, 1.0))
+
+
+## Right stick: face where it points, independent of where the player is walking.
+func _face_aim(aim: Vector2, delta: float) -> void:
+	var dir := Vector3(aim.x, 0.0, aim.y).rotated(Vector3.UP, CAMERA_YAW)
+	var target_angle := atan2(-dir.x, -dir.z)
+	_visual.rotation.y = lerp_angle(_visual.rotation.y, target_angle, clampf(turn_speed * 1.8 * delta, 0.0, 1.0))
 
 
 ## While carrying, always face the item so the player looks like they are gripping it.

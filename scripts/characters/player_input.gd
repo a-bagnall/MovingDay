@@ -6,6 +6,9 @@ class_name PlayerInput
 
 ## Raw stick or key direction before camera rotation (x right, y down on screen).
 var move := Vector2.ZERO
+## Right stick (gamepad): the way to face, same screen axes as `move`. Zero when centred.
+## Local only: other machines get the resulting facing from the player's streamed state.
+var aim := Vector2.ZERO
 ## True while the interact button is held.
 var interact := false
 ## Held while raising a carried item (see Furniture).
