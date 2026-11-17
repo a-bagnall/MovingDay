@@ -337,8 +337,7 @@ static func style_label3d(label: Label3D) -> void:
 
 ## Crisp, resolution-independent device artwork for the controls guide.
 static func device_image(source: int, image_size: Vector2 = Vector2(560, 240)) -> Control:
-	var image_script := preload("res://scripts/ui/device_icon.gd")
-	var image := image_script.new() as Control
+	var image := DeviceIcon.new()
 	image.custom_minimum_size = image_size
 	if source == InputSetup.KB_WASD:
 		image.device_kind = "keyboard"
