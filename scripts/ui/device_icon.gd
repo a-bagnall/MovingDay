@@ -64,7 +64,7 @@ func _draw_keyboard() -> void:
 		var rect: Rect2 = arrow_positions[direction]
 		var is_active := keyboard_layout == "arrows"
 		draw_rect(rect, active if is_active else key, true, 4)
-		var glyph := {"up": "↑", "left": "←", "down": "↓", "right": "→"}[direction]
+		var glyph: String = {"up": "↑", "left": "←", "down": "↓", "right": "→"}[direction]
 		draw_string(ThemeDB.fallback_font, rect.position + Vector2(12, 15),
 			glyph, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, ink)
 
