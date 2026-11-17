@@ -33,5 +33,5 @@ static func generate_contract(contract_number: int) -> Contract:
 	contract.contract_number = contract_number
 	contract.client_name = str(data["client_name"])
 	contract.letter_text = str(data["letter_text"])
-	contract.payout = float(data["payout"])
+	contract.payout = float(data["payout"]) * Balance.CONTRACT_PAYOUT_MULTIPLIER
 	return contract

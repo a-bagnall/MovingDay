@@ -7,7 +7,6 @@ extends Node
 ## job screens show the same thing), and the clients change scene with it. Clients that
 ## want something to happen (continue past the briefing) ask the host.
 
-const DAY_LENGTH := Balance.DAY_LENGTH
 const HUB_EVERY_N_DAYS := Balance.HUB_EVERY_N_DAYS
 
 ## Why a run ended (see fail_run).
@@ -22,7 +21,7 @@ const RUN_OVER_SCENE := "res://scenes/ui/run_over.tscn"
 
 const _SCENES := [MAIN_MENU_SCENE, HUB_SCENE, JOB_SCENE, BRIEFING_SCENE, RUN_OVER_SCENE]
 
-var day_time_remaining := DAY_LENGTH
+var day_time_remaining := Balance.Balance.DAY_LENGTH
 var day_clock_running := false
 var day_contract_count := 0
 var day_total: Dictionary = {}
@@ -92,10 +91,11 @@ func finish_contract(result: Dictionary) -> void:
 	day_clock_running = false
 	previous_contract_result = result.duplicate(true)
 	day_contract_count += 1
+	SaveManager.run.contracts_attempted += 1
 	_accumulate_day_result(result)
 
 	if day_time_remaining > 0.0:
-		current_contract = ContractGenerator.generate_contract(day_contract_count + 1)
+		current_contract = ContractGenerator.generate_contract(SaveManager.run.contracts_attempted + 1)
 	else:
 		current_contract = null
 	_go(BRIEFING_SCENE)
@@ -158,6 +158,8 @@ func _build_run_summary(cause: String, take_home: float, overhead: float) -> Dic
 		"days_completed": days_completed,
 		"wallet": run.wallet,
 		"contracts_completed": run.contracts_completed,
+		"contracts_attempted": run.contracts_attempted,
+		"contracts_failed": run.contracts_failed,
 		"total_earned": run.total_earned,
 		"total_damage": run.total_damage,
 		"total_overhead": run.total_overhead,
@@ -202,7 +204,7 @@ func end_run() -> void:
 func _begin_day() -> void:
 	_reset_day_state()
 	SaveManager.begin_day()
-	current_contract = ContractGenerator.generate_contract(1)
+	current_contract = ContractGenerator.generate_contract(SaveManager.run.contracts_attempted + 1)
 	_go(BRIEFING_SCENE)
 
 
@@ -214,7 +216,7 @@ func _enter_day() -> void:
 
 
 func _reset_day_state() -> void:
-	day_time_remaining = DAY_LENGTH
+	day_time_remaining = Balance.DAY_LENGTH
 	day_clock_running = false
 	day_contract_count = 0
 	day_total = {
@@ -225,6 +227,9 @@ func _reset_day_state() -> void:
 		"damage": 0.0,
 		"time": 0.0,
 		"contracts_completed": 0,
+		"contracts_failed": 0,
+		"contracts_attempted": 0,
+		"failure_penalty": 0.0,
 	}
 	previous_contract_result.clear()
 	current_contract = null
@@ -233,7 +238,12 @@ func _reset_day_state() -> void:
 func _accumulate_day_result(result: Dictionary) -> void:
 	for key in ["payment", "base_pay", "time_bonus", "style_bonus", "damage", "time"]:
 		day_total[key] = float(day_total.get(key, 0.0)) + float(result.get(key, 0.0))
-	day_total["contracts_completed"] = day_contract_count
+	if bool(result.get("success", true)):
+		day_total["contracts_completed"] = int(day_total.get("contracts_completed", 0)) + 1
+	else:
+		day_total["contracts_failed"] = int(day_total.get("contracts_failed", 0)) + 1
+	day_total["contracts_attempted"] = int(day_total.get("contracts_attempted", 0)) + 1
+	day_total["failure_penalty"] = float(day_total.get("failure_penalty", 0.0)) + float(result.get("failure_penalty", 0.0))
 
 
 func _go(path: String) -> void:
@@ -288,7 +298,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		SaveManager.clear_mirror()
 	else:
 		SaveManager.mirror_run(run_data)
-	day_time_remaining = float(snapshot.get("day_time_remaining", DAY_LENGTH))
+	day_time_remaining = float(snapshot.get("day_time_remaining", Balance.Balance.Balance.DAY_LENGTH))
 	day_clock_running = bool(snapshot.get("day_clock_running", false))
 	day_contract_count = int(snapshot.get("day_contract_count", 0))
 	day_total = snapshot.get("day_total", {})

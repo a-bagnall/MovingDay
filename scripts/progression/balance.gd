@@ -19,19 +19,28 @@ extends RefCounted
 ## day's last. NOTE: 10 s means every day is exactly one contract (the clock was this short
 ## while the loop was being built). Try 240-400 for two or three contracts a day, and then
 ## raise OVERHEAD_* too, since there is more money to be made per day.
-const DAY_LENGTH := 10.0
+static var DAY_LENGTH := 240.0
 ## The team visits the hub (shop and Pick One) before every Nth day.
 const HUB_EVERY_N_DAYS := 3
-## Day 1 spawns a single easy Box only, to keep the first job gentle while testing.
-## Set false to play day 1 with the whole house.
-const DAY_ONE_SINGLE_ITEM := true
+
+## Contract workload ramps by contract attempt across the whole run.
+static var CONTRACT_START_ITEMS := 1
+static var CONTRACT_ITEMS_PER_STEP := 1
+static var CONTRACT_ITEMS_EVERY := 1
+static var CONTRACT_MAX_ITEMS := 7
+const CONTRACT_ITEM_ORDER := ["Box", "Chair", "Lamp", "TV", "Cabinet", "Sofa", "Fridge"]
+
+## A missed contract pays for delivered items, then deducts this penalty.
+static var FAILED_CONTRACT_BASE_PENALTY := 150.0
+static var FAILED_CONTRACT_PER_MISSING_ITEM_PENALTY := 75.0
+static var CONTRACT_PAYOUT_MULTIPLIER := 1.0
 
 
 # --- Pay ------------------------------------------------------------------------------
 
 ## Seconds under which a time bonus is earned, and dollars earned per second under it.
-const PAR_TIME := 120.0
-const TIME_BONUS_RATE := 2.0
+static var PAR_TIME := 120.0
+static var TIME_BONUS_RATE := 2.0
 ## Extra pay, as a fraction of base + time bonus, for the outfit worn on the day.
 const WORKWEAR_STYLE_BONUS := 0.10
 const ENCHANTED_WORKWEAR_STYLE_BONUS := 0.15
@@ -41,8 +50,8 @@ const ENCHANTED_WORKWEAR_STYLE_BONUS := 0.15
 
 ## At the end of each day the company pays running costs (fuel, wages, rent). If that
 ## takes the wallet below zero the company goes bankrupt and the run is over.
-const OVERHEAD_BASE := 150.0
-const OVERHEAD_PER_DAY := 60.0
+static var OVERHEAD_BASE := 150.0
+static var OVERHEAD_PER_DAY := 60.0
 
 
 static func overhead_for_day(day: int) -> float:
@@ -76,8 +85,8 @@ const WET_FLOORS_CONTROL := 0.2            # LOWER is worse: control (accelerati
 ## raise HELD_ANGULAR_DAMP (it swings less) or raise HOLD_GRAVITY_SCALE (it floats less).
 
 ## Walking. Acceleration and braking are m/s per second; the top speed is 5 m/s.
-const PLAYER_ACCELERATION := 20.0
-const PLAYER_BRAKING := 16.0
+static var PLAYER_ACCELERATION := 20.0
+static var PLAYER_BRAKING := 16.0
 ## Below 1 makes reversing direction sluggish (and can cause a stumble at speed).
 const REVERSAL_PENALTY := 0.8
 ## While carrying, how fast you speed up and brake scales between this and 1.0 by how
@@ -86,8 +95,8 @@ const CARRY_RESPONSE_FLOOR := 0.85
 
 ## The spring that pulls a held item to the player. Critical damping (no bounce, no lag)
 ## is 2 * sqrt(stiffness), so keep CARRY_DAMPING at or just above that.
-const CARRY_STIFFNESS := 90.0
-const CARRY_DAMPING := 19.0
+static var CARRY_STIFFNESS := 90.0
+static var CARRY_DAMPING := 19.0
 ## Cap (m/s^2) on how hard that spring can accelerate an item.
 const MAX_CARRY_ACCEL := 70.0
 ## Gravity on a fully lifted item (1.0 = full weight; lower floats). And rotational drag
@@ -101,7 +110,7 @@ const HELD_ANGULAR_DAMP := 7.0
 ## One player can do every job. When a single player is the whole team, a two-player item can
 ## be carried alone, with no grip loss, at this fraction of walking speed (a one-player item
 ## alone moves at up to 0.7, a team of two at up to 0.95). Lower = harder.
-const SOLO_HEAVY_SPEED := 0.45
+static var SOLO_HEAVY_SPEED := 0.45
 
 
 # --- Lift (hold the Lift button while carrying) ----------------------------------------
@@ -178,3 +187,54 @@ const ENCHANTED_WORKWEAR_PRICE := 400
 
 ## The day clock turns pink under this many seconds.
 const LOW_TIME_WARNING := 60.0
+
+
+
+## Number of easiest furniture items requested by a contract attempt.
+static func contract_item_target(contract_number: int) -> int:
+	var step := floori(float(maxi(contract_number - 1, 0)) / float(maxi(CONTRACT_ITEMS_EVERY, 1)))
+	return clampi(CONTRACT_START_ITEMS + step * CONTRACT_ITEMS_PER_STEP, 1, CONTRACT_MAX_ITEMS)
+
+
+## Controls shown by the in-game F4 Balance Lab. Changes last for this play session.
+static func debug_controls() -> Array[Dictionary]:
+	return [
+		{"id":"DAY_LENGTH","label":"Day length (sec)","min":30.0,"max":900.0,"step":15.0,"value":DAY_LENGTH},
+		{"id":"CONTRACT_START_ITEMS","label":"Starting items","min":1.0,"max":7.0,"step":1.0,"value":CONTRACT_START_ITEMS},
+		{"id":"CONTRACT_ITEMS_PER_STEP","label":"Items added per step","min":1.0,"max":3.0,"step":1.0,"value":CONTRACT_ITEMS_PER_STEP},
+		{"id":"CONTRACT_ITEMS_EVERY","label":"Contracts per step","min":1.0,"max":5.0,"step":1.0,"value":CONTRACT_ITEMS_EVERY},
+		{"id":"CONTRACT_MAX_ITEMS","label":"Maximum items","min":1.0,"max":7.0,"step":1.0,"value":CONTRACT_MAX_ITEMS},
+		{"id":"FAILED_CONTRACT_BASE_PENALTY","label":"Failure base penalty ($)","min":0.0,"max":1000.0,"step":25.0,"value":FAILED_CONTRACT_BASE_PENALTY},
+		{"id":"FAILED_CONTRACT_PER_MISSING_ITEM_PENALTY","label":"Penalty per missed item ($)","min":0.0,"max":500.0,"step":10.0,"value":FAILED_CONTRACT_PER_MISSING_ITEM_PENALTY},
+		{"id":"CONTRACT_PAYOUT_MULTIPLIER","label":"Contract payout multiplier","min":0.1,"max":3.0,"step":0.05,"value":CONTRACT_PAYOUT_MULTIPLIER},
+		{"id":"PAR_TIME","label":"Par time (sec)","min":10.0,"max":600.0,"step":10.0,"value":PAR_TIME},
+		{"id":"TIME_BONUS_RATE","label":"Time bonus ($/sec)","min":0.0,"max":20.0,"step":0.5,"value":TIME_BONUS_RATE},
+		{"id":"OVERHEAD_BASE","label":"Base daily overhead ($)","min":0.0,"max":1500.0,"step":25.0,"value":OVERHEAD_BASE},
+		{"id":"OVERHEAD_PER_DAY","label":"Overhead growth/day ($)","min":0.0,"max":500.0,"step":10.0,"value":OVERHEAD_PER_DAY},
+		{"id":"PLAYER_ACCELERATION","label":"Player acceleration","min":2.0,"max":40.0,"step":1.0,"value":PLAYER_ACCELERATION},
+		{"id":"PLAYER_BRAKING","label":"Player braking","min":2.0,"max":40.0,"step":1.0,"value":PLAYER_BRAKING},
+		{"id":"CARRY_STIFFNESS","label":"Carry stiffness","min":10.0,"max":200.0,"step":5.0,"value":CARRY_STIFFNESS},
+		{"id":"CARRY_DAMPING","label":"Carry damping","min":2.0,"max":40.0,"step":1.0,"value":CARRY_DAMPING},
+		{"id":"SOLO_HEAVY_SPEED","label":"Solo heavy speed","min":0.1,"max":1.0,"step":0.05,"value":SOLO_HEAVY_SPEED},
+	]
+
+
+static func set_debug_value(id: String, value: float) -> void:
+	match id:
+		"DAY_LENGTH": DAY_LENGTH = value
+		"CONTRACT_START_ITEMS": CONTRACT_START_ITEMS = roundi(value)
+		"CONTRACT_ITEMS_PER_STEP": CONTRACT_ITEMS_PER_STEP = roundi(value)
+		"CONTRACT_ITEMS_EVERY": CONTRACT_ITEMS_EVERY = roundi(value)
+		"CONTRACT_MAX_ITEMS": CONTRACT_MAX_ITEMS = roundi(value)
+		"FAILED_CONTRACT_BASE_PENALTY": FAILED_CONTRACT_BASE_PENALTY = value
+		"FAILED_CONTRACT_PER_MISSING_ITEM_PENALTY": FAILED_CONTRACT_PER_MISSING_ITEM_PENALTY = value
+		"CONTRACT_PAYOUT_MULTIPLIER": CONTRACT_PAYOUT_MULTIPLIER = value
+		"PAR_TIME": PAR_TIME = value
+		"TIME_BONUS_RATE": TIME_BONUS_RATE = value
+		"OVERHEAD_BASE": OVERHEAD_BASE = value
+		"OVERHEAD_PER_DAY": OVERHEAD_PER_DAY = value
+		"PLAYER_ACCELERATION": PLAYER_ACCELERATION = value
+		"PLAYER_BRAKING": PLAYER_BRAKING = value
+		"CARRY_STIFFNESS": CARRY_STIFFNESS = value
+		"CARRY_DAMPING": CARRY_DAMPING = value
+		"SOLO_HEAVY_SPEED": SOLO_HEAVY_SPEED = value

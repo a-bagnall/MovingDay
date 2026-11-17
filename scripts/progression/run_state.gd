@@ -18,6 +18,8 @@ var modifiers: Array[String] = []
 var modifier_day := 0
 ## Lifetime stats of this run, updated when a day ends.
 var contracts_completed := 0
+var contracts_attempted := 0
+var contracts_failed := 0
 var total_earned := 0.0
 var total_damage := 0.0
 var best_day := 0.0   # biggest take-home of any single day
@@ -39,6 +41,8 @@ func to_dict() -> Dictionary:
 		"modifiers": modifiers.duplicate(),
 		"modifier_day": modifier_day,
 		"contracts_completed": contracts_completed,
+		"contracts_attempted": contracts_attempted,
+		"contracts_failed": contracts_failed,
 		"total_earned": total_earned,
 		"total_damage": total_damage,
 		"best_day": best_day,
@@ -70,6 +74,8 @@ static func from_dict(data: Dictionary) -> RunState:
 	state.day = int(data["day"])
 	# Optional for backwards compatibility with existing version-1 save slots.
 	state.contracts_completed = int(data.get("contracts_completed", 0))
+	state.contracts_attempted = int(data.get("contracts_attempted", state.contracts_completed))
+	state.contracts_failed = int(data.get("contracts_failed", maxi(state.contracts_attempted - state.contracts_completed, 0)))
 	state.total_earned = float(data.get("total_earned", 0.0))
 	state.total_damage = float(data.get("total_damage", 0.0))
 	state.best_day = float(data.get("best_day", 0.0))

@@ -87,6 +87,7 @@ func end_day(result: Dictionary, overhead := 0.0) -> void:
 	run.wallet += float(result["payment"]) - overhead
 	run.total_overhead += overhead
 	run.contracts_completed += int(result.get("contracts_completed", 0))
+	run.contracts_failed += int(result.get("contracts_failed", 0))
 	run.total_earned += float(result["payment"])
 	run.total_damage += float(result.get("damage", 0.0))
 	run.best_day = maxf(run.best_day, float(result["payment"]))

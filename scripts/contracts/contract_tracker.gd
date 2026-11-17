@@ -5,9 +5,7 @@ class_name ContractTracker
 
 signal contract_finished(result: Dictionary)
 
-const PAR_TIME := 120.0        ## Seconds under which a time bonus is earned.
-const TIME_BONUS_RATE := 2.0   ## Dollars per second under par.
-const FIRST_DAY_DEBUG_ITEM := "Box"
+## PAR_TIME and TIME_BONUS_RATE are live Balance settings.
 
 var zone: DeliveryZone
 var required: Array[Furniture] = []
@@ -27,25 +25,23 @@ func setup(delivery_zone: DeliveryZone, items: Array[Furniture], job_contract: C
 	zone = delivery_zone
 	contract = job_contract if job_contract != null else GameFlow.current_contract
 
-	# Keep day one deliberately simple while the progression loop is being tested.
-	# Retain the lightweight, single-player Box and remove the other spawned items.
-	if SaveManager.run != null and SaveManager.run.day == 1:
-		var debug_item: Furniture
-		for item in items:
-			if item.data != null and item.data.display_name == FIRST_DAY_DEBUG_ITEM:
-				debug_item = item
-				break
-		if debug_item == null and not items.is_empty():
-			debug_item = items[0]
-
-		for item in items:
-			if item != debug_item:
-				item.queue_free()
-		items.clear()
-		if debug_item != null:
-			items.append(debug_item)
-
-	required = items
+	# Contracts ask for a small, progressively larger subset of the house.
+	# The deterministic priority keeps early jobs approachable and stays in sync online.
+	var candidates: Array[Furniture] = []
+	candidates.append_array(items)
+	candidates.sort_custom(func(a: Furniture, b: Furniture) -> bool:
+		return _item_rank(a) < _item_rank(b)
+	)
+	var contract_number := contract.contract_number if contract != null else 1
+	var target := mini(Balance.contract_item_target(contract_number), candidates.size())
+	required.clear()
+	for i in candidates.size():
+		if i < target:
+			required.append(candidates[i])
+		else:
+			candidates[i].queue_free()
+	items.clear()
+	items.append_array(required)
 	_build_ui()
 
 
@@ -118,8 +114,19 @@ func _process(delta: float) -> void:
 		UIKit.PINK if day_left < 60.0 else (UIKit.GOLD if day_left < 120.0 else UIKit.CREAM))
 
 	# The host decides when the job is over; clients follow it to the briefing.
-	if delivered >= required.size() and required.size() > 0 and GameFlow.is_authority():
-		_finish()
+	if not GameFlow.is_authority():
+		return
+	if delivered >= required.size() and required.size() > 0:
+		_finish(true)
+	elif GameFlow.day_time_remaining <= 0.0:
+		_finish(false)
+
+
+func _item_rank(item: Furniture) -> int:
+	if item.data == null:
+		return Balance.CONTRACT_ITEM_ORDER.size()
+	var rank := Balance.CONTRACT_ITEM_ORDER.find(item.data.display_name)
+	return rank if rank >= 0 else Balance.CONTRACT_ITEM_ORDER.size()
 
 
 func total_damage() -> float:
@@ -130,13 +137,16 @@ func total_damage() -> float:
 	return total
 
 
-func _finish() -> void:
+func _finish(success: bool) -> void:
 	finished = true
 	var delivered := zone.delivered_items.size()
+	var missing := maxi(required.size() - delivered, 0)
 	var damage := total_damage()
 	var completion := float(delivered) / float(maxi(required.size(), 1))
 	var base := contract.payout * completion if contract else 500.0 * completion
-	var time_bonus := maxf(0.0, PAR_TIME - elapsed) * TIME_BONUS_RATE
+	var failure_penalty := 0.0 if success else Balance.FAILED_CONTRACT_BASE_PENALTY \
+		+ float(missing) * Balance.FAILED_CONTRACT_PER_MISSING_ITEM_PENALTY
+	var time_bonus := maxf(0.0, Balance.PAR_TIME - elapsed) * Balance.TIME_BONUS_RATE if success else 0.0
 	var style_rate := 0.0
 	if SaveManager.profile != null:
 		match SaveManager.profile.equipped_outfit:
@@ -145,13 +155,17 @@ func _finish() -> void:
 			"enchanted_workwear":
 				style_rate = 0.15
 	var style_bonus := (base + time_bonus) * style_rate
-	var payment := maxf(0.0, base + time_bonus + style_bonus - damage)
+	var payment := maxf(0.0, base + time_bonus + style_bonus - damage - failure_penalty)
 	var result := {
 		"client_name": contract.client_name if contract else "Client",
 		"contract_number": contract.contract_number if contract else 1,
+		"success": success,
 		"items_delivered": delivered,
+		"items_required": required.size(),
+		"items_missing": missing,
 		"completion": completion,
 		"damage": damage,
+		"failure_penalty": failure_penalty,
 		"time": elapsed,
 		"base_pay": base,
 		"time_bonus": time_bonus,
