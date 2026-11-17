@@ -26,43 +26,43 @@ func _draw_keyboard() -> void:
 	var ink := Color("5e2f25")
 	var key := Color("fffbe8")
 	var active := Color("ffe58a")
-	draw_rect(Rect2(35, 42, 330, 142), ink, true, 18)
-	draw_rect(Rect2(43, 50, 314, 126), Color("9a5444"), true, 12)
-	var labels := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
-		"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P",
-		"A", "S", "D", "F", "G", "H", "J", "K", "L", "↵",
-		"⇧", "Z", "X", "C", "V", "B", "N", "M", "←", "→"]
-	for i in range(labels.size()):
-		var row := i / 10
-		var col := i % 10
-		var rect := Rect2(51 + col * 30, 59 + row * 27, 25, 21)
-		var letter := labels[i]
-		var is_active := false
-		if keyboard_layout == "wasd":
-			is_active = letter in ["W", "A", "S", "D"]
-		else:
-			is_active = letter in ["↑", "↓", "←", "→"]
-		draw_rect(rect, active if is_active else key, true, 4)
-	# Make the arrow layout unmistakable while retaining a tidy keyboard silhouette.
-	if keyboard_layout == "arrows":
-		draw_rect(Rect2(282, 143, 25, 21), active, true, 4)
-		draw_string(ThemeDB.fallback_font, Vector2(300, 161), "↑", HORIZONTAL_ALIGNMENT_CENTER, -1, 16, ink)
-		draw_string(ThemeDB.fallback_font, Vector2(330, 161), "↓", HORIZONTAL_ALIGNMENT_CENTER, -1, 16, ink)
-	else:
-		draw_rect(Rect2(81, 86, 25, 21), active, true, 4)
-		draw_rect(Rect2(51, 113, 25, 21), active, true, 4)
-		draw_rect(Rect2(81, 113, 25, 21), active, true, 4)
-		draw_rect(Rect2(111, 113, 25, 21), active, true, 4)
-	for i in range(labels.size()):
-		var row := i / 10
-		var col := i % 10
-		var letter := labels[i]
-		if keyboard_layout == "arrows" and letter in ["←", "→"]:
-			continue
-		var rect := Rect2(51 + col * 30, 59 + row * 27, 25, 21)
-		draw_string(ThemeDB.fallback_font, Vector2(rect.position.x + 12, rect.position.y + 16),
-			letter, HORIZONTAL_ALIGNMENT_CENTER, -1, 12, ink)
+	draw_rect(Rect2(28, 34, 344, 152), ink, true, 18)
+	draw_rect(Rect2(36, 42, 328, 136), Color("9a5444"), true, 12)
 
+	# Four compact rows of keys. Highlight only the active movement cluster.
+	var rows := [
+		["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+		["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+		["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+		["Z", "X", "C", "V", "B", "N", "M"]
+	]
+	for row_index in range(rows.size()):
+		var row: Array = rows[row_index]
+		var row_width := row.size() * 29.0 + (row.size() - 1) * 3.0
+		var start_x := (400.0 - row_width) * 0.5
+		for col_index in range(row.size()):
+			var letter: String = row[col_index]
+			var is_active := keyboard_layout == "wasd" and letter in ["W", "A", "S", "D"]
+			var rect := Rect2(start_x + col_index * 32.0, 51 + row_index * 28.0, 29, 23)
+			draw_rect(rect, active if is_active else key, true, 4)
+			draw_string(ThemeDB.fallback_font, rect.position + Vector2(14, 17),
+				letter, HORIZONTAL_ALIGNMENT_CENTER, -1, 12, ink)
+
+	# Space bar and a separate, familiar arrow-key cluster.
+	draw_rect(Rect2(100, 165, 145, 10), key, true, 4)
+	var arrow_positions := {
+		"up": Rect2(306, 145, 25, 20),
+		"left": Rect2(278, 166, 25, 20),
+		"down": Rect2(306, 166, 25, 20),
+		"right": Rect2(334, 166, 25, 20),
+	}
+	for direction in arrow_positions:
+		var rect: Rect2 = arrow_positions[direction]
+		var is_active := keyboard_layout == "arrows"
+		draw_rect(rect, active if is_active else key, true, 4)
+		var glyph := {"up": "↑", "left": "←", "down": "↓", "right": "→"}[direction]
+		draw_string(ThemeDB.fallback_font, rect.position + Vector2(12, 15),
+			glyph, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, ink)
 
 func _draw_controller() -> void:
 	var ink := Color("5e2f25")
