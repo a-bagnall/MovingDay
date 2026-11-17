@@ -29,7 +29,7 @@ static func load_and_apply() -> void:
 		fullscreen = bool(cfg.get_value("display", "fullscreen", fullscreen))
 		var saved_width := int(cfg.get_value("display", "window_width", windowed_resolution.x))
 		var saved_height := int(cfg.get_value("display", "window_height", windowed_resolution.y))
-		windowed_resolution = _nearest_resolution(Vector2i(saved_width, saved_height))
+		windowed_resolution = Vector2i(clampi(saved_width, 960, 3840), clampi(saved_height, 540, 2160))
 		vsync_enabled = bool(cfg.get_value("display", "vsync", vsync_enabled))
 		reduce_motion = bool(cfg.get_value("accessibility", "reduce_motion", reduce_motion))
 	elif err != ERR_FILE_NOT_FOUND:
@@ -63,12 +63,3 @@ static func apply() -> void:
 		DisplayServer.VSYNC_ENABLED if vsync_enabled else DisplayServer.VSYNC_DISABLED)
 
 
-static func _nearest_resolution(requested: Vector2i) -> Vector2i:
-	var best := RESOLUTIONS[1]
-	var best_distance := INF
-	for resolution in RESOLUTIONS:
-		var distance := absf(float(resolution.x - requested.x)) + absf(float(resolution.y - requested.y))
-		if distance < best_distance:
-			best = resolution
-			best_distance = distance
-	return best
