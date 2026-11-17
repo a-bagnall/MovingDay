@@ -96,7 +96,11 @@ func _show_main() -> void:
 
 func _show_controls() -> void:
 	_page = &"controls"
-	_reset(CONTROLS_WIDTH)
+	# Keep the guide inside the current window's safe area instead of forcing a
+	# fixed-width panel that can clip when the player uses a smaller window.
+	var available_width := get_viewport().get_visible_rect().size.x / UIKit.UI_SCALE - 2.0 * UIKit.SAFE_X
+	var guide_width := minf(CONTROLS_WIDTH, maxf(1200.0, available_width))
+	_reset(guide_width)
 	_content.add_child(UIKit.label("CONTROLS", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
 	var intro := UIKit.label("A quick guide to every input device", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
 	_content.add_child(intro)
@@ -105,22 +109,26 @@ func _show_controls() -> void:
 	# fallback when no gamepad is connected.
 	var devices := HBoxContainer.new()
 	devices.add_theme_constant_override("separation", UIKit.SPACE_M)
+	devices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content.add_child(devices)
-	devices.add_child(_device_card("KEYBOARD · WASD", InputSetup.KB_WASD, "Move with W A S D"))
-	devices.add_child(_device_card("KEYBOARD · ARROWS", InputSetup.KB_ARROWS, "Move with the arrow keys"))
+	var device_width := (guide_width - 2.0 * UIKit.SPACE_M) / 3.0
+	devices.add_child(_device_card("KEYBOARD · WASD", InputSetup.KB_WASD, "Move with W A S D", device_width))
+	devices.add_child(_device_card("KEYBOARD · ARROWS", InputSetup.KB_ARROWS, "Move with the arrow keys", device_width))
 	var pads := Input.get_connected_joypads()
 	var pad_source: int = pads[0] if not pads.is_empty() else -99
 	var pad_name := Input.get_joy_name(pad_source) if pad_source >= 0 else "Any compatible controller"
-	devices.add_child(_device_card("CONTROLLER", pad_source, pad_name))
+	devices.add_child(_device_card("CONTROLLER", pad_source, pad_name, device_width))
 
 	var grid := GridContainer.new()
 	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", UIKit.SPACE_M)
 	grid.add_theme_constant_override("v_separation", UIKit.SPACE_S)
 	_content.add_child(grid)
 	for row: Dictionary in CONTROL_ROWS:
 		var card := PanelContainer.new()
-		card.custom_minimum_size = Vector2(1160, 250)
+		card.custom_minimum_size = Vector2(0, 250)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var body := HBoxContainer.new()
 		body.add_theme_constant_override("separation", UIKit.SPACE_M)
 		card.add_child(body)
@@ -159,14 +167,15 @@ func _binding_row(device: String, source: int, action: String) -> HBoxContainer:
 	return row
 
 
-func _device_card(title: String, source: int, description: String) -> PanelContainer:
+func _device_card(title: String, source: int, description: String, card_width: float) -> PanelContainer:
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(760, 360)
+	card.custom_minimum_size = Vector2(card_width, 360)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", UIKit.SPACE_S)
 	card.add_child(column)
 	column.add_child(UIKit.label(title, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
-	column.add_child(UIKit.device_image(source, Vector2(680, 210)))
+	column.add_child(UIKit.device_image(source, Vector2(card_width - 80.0, 210)))
 	var caption := UIKit.label(description, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(caption)
