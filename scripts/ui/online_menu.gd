@@ -56,30 +56,9 @@ func _input(event: InputEvent) -> void:
 
 
 func _build_frame() -> void:
-	var root := UIKit.setup(self)
-	# Keep the room visible; the slim shade gives the side panel enough contrast.
-	var shade := ColorRect.new()
-	shade.color = Color(0.0, 0.0, 0.0, 0.16)
-	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(shade)
-
-	var panel := PanelContainer.new()
-	panel.anchor_left = 1.0
-	panel.anchor_right = 1.0
-	panel.anchor_top = 0.5
-	panel.anchor_bottom = 0.5
-	panel.offset_left = -1500.0
-	panel.offset_right = -UIKit.SAFE_X
-	panel.offset_top = -900.0
-	panel.offset_bottom = 900.0
-	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	panel.custom_minimum_size.x = 1380.0
-	root.add_child(panel)
-
-	_content = VBoxContainer.new()
-	_content.add_theme_constant_override("separation", UIKit.SPACE_M)
-	panel.add_child(_content)
+	# Keep the multiplayer panel centred over the room; it should not be confused
+	# with the separate, off-centre join hint on the main menu HUD.
+	_content = UIKit.modal(self, 1300, false)
 
 
 ## Rebuilds the panel for the current network state.
@@ -89,13 +68,7 @@ func _refresh() -> void:
 		_content.remove_child(child)
 		child.queue_free()
 
-	var heading := HBoxContainer.new()
-	heading.add_child(UIKit.label("ONLINE", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.add_child(spacer)
-	heading.add_child(UIKit.button("Close", close, false, 220.0))
-	_content.add_child(heading)
+	_content.add_child(UIKit.label("ONLINE", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
 	if NetworkManager.is_online():
 		_build_session()
 	else:

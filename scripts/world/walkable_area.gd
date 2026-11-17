@@ -161,7 +161,7 @@ func _build_hud(title: String) -> Label:
 
 	var note := PanelContainer.new()
 	note.theme_type_variation = &"NotePanel"
-	note.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	note.size_flags_horizontal = Control.SIZE_SHRINK_END
 	var status := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel")
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.custom_minimum_size.x = 1800   # fixed width so long lines wrap instead of overflowing

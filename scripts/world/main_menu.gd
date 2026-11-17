@@ -306,12 +306,12 @@ func _update_text() -> void:
 		lines.append(_notice)
 		lines.append("")
 	if NetworkManager.can_add_local_player():
-		lines.append("Hold %s to join" % UIKit.interact_keys_text())
+		lines.append("Hold %s to join the room" % UIKit.interact_keys_text())
 	if InputSetup.assigned_count() > 0:
 		if NetworkManager.mode == NetworkManager.Mode.CLIENT:
-			lines.append("The host chooses the run")
+			lines.append("Waiting for the host to choose a save slot")
 		else:
-			lines.append("Stand on a slot and press %s to play" % UIKit.interact_keys_text())
+			lines.append("Choose a save slot, then press %s to start" % UIKit.interact_keys_text())
 	var online := _online_line()
 	if not online.is_empty():
 		lines.append(online)
