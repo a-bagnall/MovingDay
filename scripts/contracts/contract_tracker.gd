@@ -155,7 +155,7 @@ func _finish(success: bool) -> void:
 			"enchanted_workwear":
 				style_rate = 0.15
 	var style_bonus := (base + time_bonus) * style_rate
-	var payment := maxf(0.0, base + time_bonus + style_bonus - damage - failure_penalty)
+	var payment := base + time_bonus + style_bonus - damage - failure_penalty
 	var result := {
 		"client_name": contract.client_name if contract else "Client",
 		"contract_number": contract.contract_number if contract else 1,
