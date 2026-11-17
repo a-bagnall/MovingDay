@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://df16x6vfriycd"
+path="res://.godot/imported/DOORMisc_Patio Door Close_PSP_Mono09.wav-82209734f16e8d32d498cacc4c871cfe.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Doors/DOORMisc_Patio Door Close_PSP_Mono09.wav"
+dest_files=["res://.godot/imported/DOORMisc_Patio Door Close_PSP_Mono09.wav-82209734f16e8d32d498cacc4c871cfe.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

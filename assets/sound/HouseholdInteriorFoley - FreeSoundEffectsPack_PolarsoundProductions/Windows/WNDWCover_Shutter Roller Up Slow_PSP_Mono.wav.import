@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://dpgii5aexp64x"
+path="res://.godot/imported/WNDWCover_Shutter Roller Up Slow_PSP_Mono.wav-288af2116a46fba15f0a9cb470e1276a.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Windows/WNDWCover_Shutter Roller Up Slow_PSP_Mono.wav"
+dest_files=["res://.godot/imported/WNDWCover_Shutter Roller Up Slow_PSP_Mono.wav-288af2116a46fba15f0a9cb470e1276a.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

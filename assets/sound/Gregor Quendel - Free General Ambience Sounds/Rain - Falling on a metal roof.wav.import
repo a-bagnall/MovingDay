@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://40hwlvbapyxr"
+path="res://.godot/imported/Rain - Falling on a metal roof.wav-7387c9b303afcea516e86730436c21e1.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/Rain - Falling on a metal roof.wav"
+dest_files=["res://.godot/imported/Rain - Falling on a metal roof.wav-7387c9b303afcea516e86730436c21e1.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

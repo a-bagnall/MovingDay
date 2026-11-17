@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://cgwy0w2fhiw35"
+path="res://.godot/imported/Week 38 - Shimmer SPARKLE.ogg-f17df07140d4e903dbc7c6e32b055b19.oggvorbisstr"
+
+[deps]
+
+source_file="res://assets/sound/music-loop-bundle-2026-q3/Week 38 - Shimmer SPARKLE.ogg"
+dest_files=["res://.godot/imported/Week 38 - Shimmer SPARKLE.ogg-f17df07140d4e903dbc7c6e32b055b19.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

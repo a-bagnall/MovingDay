@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://2aibym006djh"
+path="res://.godot/imported/Week 39 - Homesteading MOVING IN.ogg-28179156ec65be635e9d80357127b47d.oggvorbisstr"
+
+[deps]
+
+source_file="res://assets/sound/music-loop-bundle-2026-q3/Week 39 - Homesteading MOVING IN.ogg"
+dest_files=["res://.godot/imported/Week 39 - Homesteading MOVING IN.ogg-28179156ec65be635e9d80357127b47d.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

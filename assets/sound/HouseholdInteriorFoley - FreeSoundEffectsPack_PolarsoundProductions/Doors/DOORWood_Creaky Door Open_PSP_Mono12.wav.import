@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://c7djv61blhyoe"
+path="res://.godot/imported/DOORWood_Creaky Door Open_PSP_Mono12.wav-6f1e6390af036ab88e460bf7e3a9e859.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Doors/DOORWood_Creaky Door Open_PSP_Mono12.wav"
+dest_files=["res://.godot/imported/DOORWood_Creaky Door Open_PSP_Mono12.wav-6f1e6390af036ab88e460bf7e3a9e859.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

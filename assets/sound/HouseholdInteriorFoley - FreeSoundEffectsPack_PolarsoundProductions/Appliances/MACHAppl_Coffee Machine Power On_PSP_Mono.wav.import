@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://bvmov54vumoyw"
+path="res://.godot/imported/MACHAppl_Coffee Machine Power On_PSP_Mono.wav-43c37672226da5793f6b2d18bc90afb5.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Appliances/MACHAppl_Coffee Machine Power On_PSP_Mono.wav"
+dest_files=["res://.godot/imported/MACHAppl_Coffee Machine Power On_PSP_Mono.wav-43c37672226da5793f6b2d18bc90afb5.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

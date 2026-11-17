@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://ctcuble7d8x6e"
+path="res://.godot/imported/City Ambience - Traffic - Bridge - Tram, train, cars, pedestrians.wav-e7e72c78a8ced83876f7259e6c1d360a.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/City Ambience - Traffic - Bridge - Tram, train, cars, pedestrians.wav"
+dest_files=["res://.godot/imported/City Ambience - Traffic - Bridge - Tram, train, cars, pedestrians.wav-e7e72c78a8ced83876f7259e6c1d360a.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

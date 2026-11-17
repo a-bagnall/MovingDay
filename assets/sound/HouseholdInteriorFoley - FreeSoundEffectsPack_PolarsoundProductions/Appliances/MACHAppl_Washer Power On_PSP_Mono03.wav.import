@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://ckwwhhk5edhpk"
+path="res://.godot/imported/MACHAppl_Washer Power On_PSP_Mono03.wav-3d1b66a231a14ca4a3a3231f065cf8f4.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Appliances/MACHAppl_Washer Power On_PSP_Mono03.wav"
+dest_files=["res://.godot/imported/MACHAppl_Washer Power On_PSP_Mono03.wav-3d1b66a231a14ca4a3a3231f065cf8f4.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

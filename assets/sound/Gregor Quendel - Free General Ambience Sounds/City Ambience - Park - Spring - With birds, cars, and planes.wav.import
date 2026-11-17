@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://d3wl22viksmfm"
+path="res://.godot/imported/City Ambience - Park - Spring - With birds, cars, and planes.wav-af7c9ef163215bab893c0b05b8d6e340.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/City Ambience - Park - Spring - With birds, cars, and planes.wav"
+dest_files=["res://.godot/imported/City Ambience - Park - Spring - With birds, cars, and planes.wav-af7c9ef163215bab893c0b05b8d6e340.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

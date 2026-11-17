@@ -161,7 +161,10 @@ static func button(text: String, on_pressed: Callable, primary: bool = false,
 		b.theme_type_variation = &"PrimaryButton"
 	if min_width > 0.0:
 		b.custom_minimum_size.x = min_width
-	b.pressed.connect(on_pressed)
+	b.pressed.connect(func() -> void:
+		AudioManager.play_ui_confirm()
+		on_pressed.call())
+	b.focus_entered.connect(AudioManager.play_ui_hover)
 	b.mouse_entered.connect(func() -> void:
 		if b.is_inside_tree() and not b.disabled:
 			b.grab_focus())

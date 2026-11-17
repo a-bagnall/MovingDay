@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://b8r53uji60162"
+path="res://.godot/imported/OBJFurn_Drawer Kitchen Close_PSP_Mono03.wav-4101a6899714e5666f5dbee482b46abb.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Kitchen/OBJFurn_Drawer Kitchen Close_PSP_Mono03.wav"
+dest_files=["res://.godot/imported/OBJFurn_Drawer Kitchen Close_PSP_Mono03.wav-4101a6899714e5666f5dbee482b46abb.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

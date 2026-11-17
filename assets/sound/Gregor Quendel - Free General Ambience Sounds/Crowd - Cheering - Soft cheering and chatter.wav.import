@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://8bt1gd0qcjm2"
+path="res://.godot/imported/Crowd - Cheering - Soft cheering and chatter.wav-5a8cd89aeecbb5457fa1fe784e9ccbf9.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/Crowd - Cheering - Soft cheering and chatter.wav"
+dest_files=["res://.godot/imported/Crowd - Cheering - Soft cheering and chatter.wav-5a8cd89aeecbb5457fa1fe784e9ccbf9.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

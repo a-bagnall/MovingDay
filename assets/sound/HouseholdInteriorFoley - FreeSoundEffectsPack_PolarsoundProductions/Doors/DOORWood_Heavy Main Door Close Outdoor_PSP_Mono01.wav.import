@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://d0tbvxx7kpttq"
+path="res://.godot/imported/DOORWood_Heavy Main Door Close Outdoor_PSP_Mono01.wav-b135995c82f3c2eaab11ce4fc0678045.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Doors/DOORWood_Heavy Main Door Close Outdoor_PSP_Mono01.wav"
+dest_files=["res://.godot/imported/DOORWood_Heavy Main Door Close Outdoor_PSP_Mono01.wav-b135995c82f3c2eaab11ce4fc0678045.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

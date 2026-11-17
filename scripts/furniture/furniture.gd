@@ -281,10 +281,12 @@ func request_grab(player: Player) -> bool:
 	angular_damp = HELD_ANGULAR_DAMP
 	_pop(0.8)
 	player.pop()
+	AudioManager.play_pickup()
 	return true
 
 
 func release(player: Player) -> void:
+	var was_holding := _holders.values().has(player)
 	for i in _holders.keys():
 		if _holders[i] == player:
 			_holders.erase(i)
@@ -292,6 +294,8 @@ func release(player: Player) -> void:
 	player.speed_multiplier = 1.0
 	remove_collision_exception_with(player)
 	player.remove_collision_exception_with(self)
+	if was_holding:
+		AudioManager.play_place()
 	if _holders.is_empty():
 		gravity_scale = 1.0
 		angular_damp = 1.5
@@ -689,6 +693,9 @@ func _net_take_damage(total: float) -> void:
 		_flash = 1.0
 		_shake = 1.0
 		_show_damage_popup(amount)
+		AudioManager.play_collision()
+		if total >= data.value - 0.01:
+			AudioManager.play_break()
 		damaged.emit(amount, total)
 	total_damage = total
 
@@ -753,6 +760,9 @@ func _deal_damage(raw: float) -> void:
 	_grip_warning_flash = 0.0
 	_shake = 1.0
 	_show_damage_popup(amount)
+	AudioManager.play_collision()
+	if total_damage >= data.value - 0.01:
+		AudioManager.play_break()
 	damaged.emit(amount, total_damage)
 
 
