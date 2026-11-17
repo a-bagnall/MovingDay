@@ -223,8 +223,12 @@ static func interact_keys_text() -> String:
 
 
 static func _controller_family(source: int) -> String:
-	if source < 0:
+	# Keyboard sources are the two explicit InputSetup IDs. Other negative values
+	# are reserved for an unconnected/unknown controller, not keyboard array indices.
+	if source == InputSetup.KB_WASD or source == InputSetup.KB_ARROWS:
 		return "keyboard"
+	if source < 0:
+		return "generic"
 	var name := Input.get_joy_name(source).to_lower()
 	if name.contains("playstation") or name.contains("dualshock") or name.contains("dualsense") \
 			or name.contains("sony") or name.contains("ps4") or name.contains("ps5") \
@@ -272,10 +276,11 @@ static func _keyboard_key_label(source: int, action: String) -> String:
 
 
 static func input_glyph(source: int, action: String) -> PanelContainer:
-	var caption := _keyboard_key_label(source, action) if source < 0 else controller_button_label(source, action)
+	var is_keyboard := source == InputSetup.KB_WASD or source == InputSetup.KB_ARROWS
+	var caption := _keyboard_key_label(source, action) if is_keyboard else controller_button_label(source, action)
 	var glyph := PanelContainer.new()
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color("fffbe8") if source < 0 else Color("ffe58a")
+	style.bg_color = Color("fffbe8") if is_keyboard else Color("ffe58a")
 	style.border_color = BROWN_DARK
 	style.set_border_width_all(4)
 	if source >= 0 and ["interact", "action", "ping", "heave"].has(action):
