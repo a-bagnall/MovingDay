@@ -37,6 +37,12 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# The wardrobe uses Esc/B as its own Back action. Do not let the global pause
+	# menu consume Esc while that per-player selection panel is active.
+	if not _is_open and _in_main_menu():
+		var scene := get_tree().current_scene
+		if scene != null and scene.has_method("is_wardrobe_open") and bool(scene.call("is_wardrobe_open")):
+			return
 	var key := event as InputEventKey
 	var pad := event as InputEventJoypadButton
 	var toggle := (key != null and key.pressed and not key.echo and key.keycode == KEY_ESCAPE) \
