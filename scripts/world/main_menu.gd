@@ -301,36 +301,22 @@ func _poll_joins(delta: float) -> void:
 
 
 func _update_text() -> void:
+	# Keep the panel focused on the party roster; the join glyphs are shown
+	# separately in the HUD. No duplicate join, network, or back instructions.
 	var lines := PackedStringArray()
-	if _notice_time > 0.0:
-		lines.append(_notice)
-		lines.append("")
-	if NetworkManager.can_add_local_player():
-		lines.append("Hold %s to join the room" % UIKit.interact_keys_text())
-	if InputSetup.assigned_count() > 0:
-		if NetworkManager.mode == NetworkManager.Mode.CLIENT:
-			lines.append("Waiting for the host to choose a save slot")
-		else:
-			lines.append("Choose a save slot, then press %s to start" % UIKit.interact_keys_text())
-	var online := _online_line()
-	if not online.is_empty():
-		lines.append(online)
-	lines.append("")
+	var occupied := {}
+	for player_id in InputSetup.local_player_ids():
+		occupied[player_id] = true
+	for player_id in NetworkManager.remote_player_ids():
+		occupied[player_id] = true
 
-	var remote := NetworkManager.remote_player_ids()
 	for player_id in range(1, InputSetup.MAX_PLAYERS + 1):
-		if InputSetup.local_player_ids().has(player_id):
-			lines.append("Player %d: %s" % [player_id, InputSetup.short_name(InputSetup.source_of(player_id))])
-		elif remote.has(player_id):
-			lines.append("Player %d: online" % player_id)
+		if occupied.has(player_id):
+			var character := CharacterCatalog.character_name(CharacterCatalog.choice_for(player_id))
+			lines.append("P%d  %s" % [player_id, character])
 		else:
-			lines.append("Player %d: waiting..." % player_id)
-	for source in _held:
-		lines.append("Joining: %s %d%%" % [InputSetup.short_name(source), roundi(_held[source] / HOLD_TIME * 100.0)])
-	lines.append("")
-	lines.append("Esc / Start: menu  ·  B: back")
+			lines.append("P%d  Open" % player_id)
 	_status.text = "\n".join(lines)
-
 
 ## One line about the online session, or "" offline.
 func _online_line() -> String:
