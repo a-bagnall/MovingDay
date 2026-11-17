@@ -98,32 +98,69 @@ func _show_controls() -> void:
 	_page = &"controls"
 	_reset(CONTROLS_WIDTH)
 	_content.add_child(UIKit.label("CONTROLS", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+	var intro := UIKit.label("A quick guide to every input device", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
+	_content.add_child(intro)
+
+	# Show the actual device artwork added to the project, with a generic controller
+	# fallback when no gamepad is connected.
+	var devices := HBoxContainer.new()
+	devices.add_theme_constant_override("separation", UIKit.SPACE_M)
+	_content.add_child(devices)
+	devices.add_child(_device_card("KEYBOARD · WASD", InputSetup.KB_WASD, "Move with W A S D"))
+	devices.add_child(_device_card("KEYBOARD · ARROWS", InputSetup.KB_ARROWS, "Move with the arrow keys"))
+	var pads := Input.get_connected_joypads()
+	var pad_source: int = pads[0] if not pads.is_empty() else -99
+	var pad_name := Input.get_joy_name(pad_source) if pad_source >= 0 else "Any compatible controller"
+	devices.add_child(_device_card("CONTROLLER", pad_source, pad_name))
 
 	var grid := GridContainer.new()
-	grid.columns = 5
-	grid.add_theme_constant_override("h_separation", 50)
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", UIKit.SPACE_M)
 	grid.add_theme_constant_override("v_separation", UIKit.SPACE_S)
 	_content.add_child(grid)
-	for heading in ["", "What it does", "Keyboard 1", "Keyboard 2", "Gamepad"]:
-		var h := UIKit.label(heading, UIKit.FONT_SMALL)
-		h.add_theme_color_override("font_color", UIKit.GOLD)
-		grid.add_child(h)
 	for row: Dictionary in CONTROL_ROWS:
-		var name_label := UIKit.label(row["name"], UIKit.FONT_SMALL)
-		name_label.add_theme_color_override("font_color", UIKit.GOLD)
-		grid.add_child(name_label)
-		var what := UIKit.label(row["what"], UIKit.FONT_SMALL)
-		what.add_theme_color_override("font_color", UIKit.MUTED)
-		what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_child(what)
-		grid.add_child(UIKit.label(key_text(InputSetup.KB_WASD, row["action"]), UIKit.FONT_SMALL))
-		grid.add_child(UIKit.label(key_text(InputSetup.KB_ARROWS, row["action"]), UIKit.FONT_SMALL))
-		grid.add_child(UIKit.label(row["pad"], UIKit.FONT_SMALL))
-	_content.add_child(UIKit.label("Esc or Start opens this menu.", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(1160, 250)
+		var body := HBoxContainer.new()
+		body.add_theme_constant_override("separation", UIKit.SPACE_M)
+		card.add_child(body)
 
+		var detail := VBoxContainer.new()
+		detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		detail.add_child(UIKit.label(row["name"], UIKit.FONT_BIG))
+		var what := UIKit.label(row["what"], UIKit.FONT_SMALL)
+		what.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		what.add_theme_color_override("font_color", UIKit.MUTED)
+		detail.add_child(what)
+		body.add_child(detail)
+
+		var bindings := VBoxContainer.new()
+		bindings.add_theme_constant_override("separation", 6)
+		bindings.add_child(UIKit.chip("WASD  ·  " + key_text(InputSetup.KB_WASD, row["action"]), UIKit.CREAM))
+		bindings.add_child(UIKit.chip("ARROWS  ·  " + key_text(InputSetup.KB_ARROWS, row["action"]), UIKit.CREAM))
+		bindings.add_child(UIKit.chip("PAD  ·  " + str(row["pad"]), UIKit.GOLD))
+		body.add_child(bindings)
+		grid.add_child(card)
+
+	_content.add_child(UIKit.label("A / Enter confirms  ·  B / Esc goes back  ·  Start / Esc opens this menu",
+		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
 	var back := UIKit.button("Back", _show_main, true)
 	_content.add_child(back)
 	back.grab_focus.call_deferred()
+
+
+func _device_card(title: String, source: int, description: String) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(760, 360)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", UIKit.SPACE_S)
+	card.add_child(column)
+	column.add_child(UIKit.label(title, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+	column.add_child(UIKit.device_image(source, Vector2(680, 210)))
+	var caption := UIKit.label(description, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
+	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(caption)
+	return card
 
 
 func _show_settings() -> void:
@@ -150,7 +187,8 @@ func _show_settings() -> void:
 
 	var back := UIKit.button("Back", _show_main, true)
 	_content.add_child(back)
-	down.grab_focus.call_deferred()
+	_content.add_child(UIKit.label("B / Esc to go back", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
+	back.grab_focus.call_deferred()
 
 
 func _confirm_leave() -> void:

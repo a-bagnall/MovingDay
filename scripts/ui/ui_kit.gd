@@ -13,6 +13,7 @@ class_name UIKit
 ##   ButtonPanel     wooden button (key prompts)
 
 const PACK := "res://assets/ui/DEMO_Cozy_UI_Pack_doboui/"
+const INPUT_ART := "res://assets/ui/Controllers and Keyboard/"
 const UI_SCALE := 0.4
 
 ## Fonts. The main font is Peaberry (a pixel font, crispest at 16px multiples); the
@@ -239,6 +240,35 @@ static func paper_font() -> Font:
 static func style_label3d(label: Label3D) -> void:
 	label.font = main_font()
 	label.outline_modulate = BROWN_DARK
+
+
+## Controller or keyboard artwork for the currently assigned input source.
+## Unknown controllers use the minimal universal illustration.
+static func device_texture(source: int) -> Texture2D:
+	var path := "controller_minimal.png"
+	if source == InputSetup.KB_WASD or source == InputSetup.KB_ARROWS:
+		path = "kb_dark_all.png"
+	elif source >= 0:
+		var device_name := Input.get_joy_name(source).to_lower()
+		if device_name.contains("playstation") or device_name.contains("dualshock") \
+				or device_name.contains("dualsense") or device_name.contains("sony"):
+			path = "controller_ps.png"
+		elif device_name.contains("switch") or device_name.contains("nintendo"):
+			path = "controller_switch.png"
+		elif device_name.contains("xbox") or device_name.contains("x-input"):
+			path = "controller_xbox.png"
+	return load(INPUT_ART + path) as Texture2D
+
+
+## A consistently sized, aspect-preserving device illustration.
+static func device_image(source: int, image_size: Vector2 = Vector2(560, 240)) -> TextureRect:
+	var image := TextureRect.new()
+	image.texture = device_texture(source)
+	image.custom_minimum_size = image_size
+	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return image
 
 
 static func money(amount: float) -> String:

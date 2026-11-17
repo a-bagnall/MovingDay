@@ -64,13 +64,19 @@ func _build_card(player_id: int) -> Control:
 	panel.add_child(box)
 	var name_label := UIKit.label("P%d" % player_id, UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(name_label)
+	var device_icon := TextureRect.new()
+	device_icon.custom_minimum_size = Vector2(220, 120)
+	device_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	device_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	device_icon.visible = false
+	box.add_child(device_icon)
 	var device := UIKit.label("", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
 	device.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	device.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(device)
 	var state := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(state)
-	_cards.append({"panel": panel, "device": device, "state": state})
+	_cards.append({"panel": panel, "device": device, "device_icon": device_icon, "state": state})
 	return panel
 
 
@@ -128,20 +134,27 @@ func _update_text() -> void:
 		var device: Label = card["device"]
 		var state: Label = card["state"]
 		var panel: Control = card["panel"]
+		var device_icon: TextureRect = card["device_icon"]
 		var player_id := i + 1
 		var joining := _joining_text()
 		if player_id <= joined:
+			var source := InputSetup.source_of(player_id)
+			device_icon.texture = UIKit.device_texture(source)
+			device_icon.visible = true
 			var player_ready: bool = _ready_flags[i]
-			device.text = _device_name(InputSetup.source_of(player_id))
+			device.text = _device_name(source)
 			state.text = "READY" if player_ready else "NOT READY"
 			state.add_theme_color_override("font_color", UIKit.SUCCESS if player_ready else UIKit.PINK)
 			panel.modulate.a = 1.0
 		elif player_id == joined + 1 and not joining.is_empty():
+			device_icon.texture = UIKit.device_texture(_joining_source())
+			device_icon.visible = true
 			device.text = joining
 			state.text = "JOINING"
 			state.add_theme_color_override("font_color", UIKit.GOLD)
 			panel.modulate.a = 1.0
 		else:
+			device_icon.visible = false
 			device.text = ""
 			state.text = "WAITING"
 			state.add_theme_color_override("font_color", UIKit.MUTED)
@@ -157,11 +170,19 @@ func _update_text() -> void:
 	_hint.text = "\n".join(lines)
 
 
+## Source currently holding to join, or -99 when nobody is joining.
+func _joining_source() -> int:
+	for source in _held:
+		return source
+	return -99
+
+
 ## "Keyboard 1  45%" for whichever source is currently holding to join, or "".
 func _joining_text() -> String:
-	for source in _held:
-		return "%s\n%d%%" % [_device_name(source), roundi(_held[source] / HOLD_TIME * 100.0)]
-	return ""
+	var source := _joining_source()
+	if source == -99:
+		return ""
+	return "%s\n%d%%" % [_device_name(source), roundi(_held[source] / HOLD_TIME * 100.0)]
 
 
 ## A short name that fits a card; the full control list is in the README.
@@ -170,4 +191,5 @@ func _device_name(source: int) -> String:
 		return "Keyboard\nWASD + E"
 	if source == InputSetup.KB_ARROWS:
 		return "Keyboard\nArrows + Enter"
-	return "Gamepad\n%s" % Input.get_joy_name(source)
+	var name := Input.get_joy_name(source)
+	return "Controller\n%s" % (name if not name.is_empty() else "Gamepad")

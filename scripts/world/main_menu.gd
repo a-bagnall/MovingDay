@@ -23,6 +23,8 @@ var _held: Dictionary[int, float] = {}
 var _status: Label
 var _online_menu: OnlineMenu
 var _run_panel: RunPanel
+var _wardrobe_layer: CanvasLayer
+var _wardrobe_row: HBoxContainer
 var _slot_zones: Dictionary[int, InteractZone] = {}
 var _choosers: Dictionary[int, Chooser] = {}   # players currently picking a character
 var _notice := ""
@@ -49,6 +51,23 @@ func _ready() -> void:
 
 	_online_menu = OnlineMenu.new()
 	add_child(_online_menu)
+
+	_wardrobe_layer = CanvasLayer.new()
+	_wardrobe_layer.layer = 25
+	add_child(_wardrobe_layer)
+	var wardrobe_root := UIKit.setup(_wardrobe_layer)
+	var wardrobe_dock := CenterContainer.new()
+	wardrobe_dock.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	wardrobe_dock.offset_top = -500.0
+	wardrobe_dock.offset_bottom = -UIKit.SAFE_Y
+	wardrobe_dock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wardrobe_root.add_child(wardrobe_dock)
+	_wardrobe_row = HBoxContainer.new()
+	_wardrobe_row.add_theme_constant_override("separation", UIKit.SPACE_M)
+	_wardrobe_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wardrobe_dock.add_child(_wardrobe_row)
+	_wardrobe_layer.visible = false
+
 	_run_panel = RunPanel.new()
 	_run_panel.continue_requested.connect(_start_run)
 	_run_panel.deleted.connect(func(slot: int) -> void: _slot_zones[slot].set_text(_slot_text(slot)))
@@ -63,10 +82,16 @@ func _spawn_point(player_id: int) -> Vector3:
 ## through the catalogue and interact confirms.
 class Chooser:
 	var player_id := 0
-	var label: Label3D
+	var panel: PanelContainer
+	var character_label: Label
+	var color_label: Label
+	var color_swatch: ColorRect
+	var original_character := 0
+	var original_color := 0
 	var stick_was_neutral := true
 	var stick_y_neutral := true
 	var interact_was_down := true   # the press that opened the picker must not confirm it
+	var back_was_down := false
 
 
 func _physics_process(delta: float) -> void:
@@ -99,17 +124,36 @@ func _start_choosing(player_id: int) -> void:
 		return
 	var chooser := Chooser.new()
 	chooser.player_id = player_id
-	chooser.label = Label3D.new()
-	chooser.label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	chooser.label.no_depth_test = true
-	chooser.label.pixel_size = 0.004
-	chooser.label.font_size = 56
-	chooser.label.outline_size = 14
-	chooser.label.position = Vector3(0.0, 2.3, 0.0)
-	UIKit.style_label3d(chooser.label)
-	player.add_child(chooser.label)
+	chooser.original_character = player.character
+	chooser.original_color = player.color_index
+	chooser.panel = PanelContainer.new()
+	chooser.panel.custom_minimum_size = Vector2(760, 380)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", UIKit.SPACE_S)
+	chooser.panel.add_child(column)
+	column.add_child(UIKit.label("PLAYER %d  ·  WARDROBE" % player_id,
+		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+	chooser.character_label = UIKit.label("", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER)
+	column.add_child(chooser.character_label)
+	var color_row := HBoxContainer.new()
+	color_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	color_row.add_theme_constant_override("separation", UIKit.SPACE_S)
+	chooser.color_swatch = ColorRect.new()
+	chooser.color_swatch.custom_minimum_size = Vector2(72, 72)
+	color_row.add_child(chooser.color_swatch)
+	chooser.color_label = UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
+	color_row.add_child(chooser.color_label)
+	column.add_child(color_row)
+	column.add_child(UIKit.label("← / →  Character     ↑ / ↓  Colour",
+		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
+	column.add_child(UIKit.label("A / Interact  Confirm     B / Esc  Cancel",
+		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
+	_wardrobe_row.add_child(chooser.panel)
+	_wardrobe_layer.visible = true
+
 	player.movement_locked = true
 	player.set_character(CharacterCatalog.choice_for(player_id))
+	player.set_color_index(CharacterCatalog.color_index_for(player_id))
 	_choosers[player_id] = chooser
 	_refresh_chooser_label(chooser, player)
 
@@ -121,6 +165,13 @@ func _update_choosers() -> void:
 		if player == null:   # left the room while choosing
 			_choosers.erase(id)
 			continue
+		var source := InputSetup.source_of(id)
+		var back_down := Input.is_joy_button_pressed(source, JOY_BUTTON_B) if source >= 0 else Input.is_key_pressed(KEY_ESCAPE)
+		if back_down and not chooser.back_was_down:
+			_cancel_choosing(chooser, player)
+			continue
+		chooser.back_was_down = back_down
+
 		var x := player.input.move.x
 		if absf(x) < 0.3:
 			chooser.stick_was_neutral = true
@@ -156,19 +207,35 @@ func _finish_choosing(chooser: Chooser, player: Player) -> void:
 	SaveManager.remember_color(ordinal, player.color_index)
 	player.movement_locked = false
 	player.pop()
-	chooser.label.queue_free()
+	chooser.panel.queue_free()
 	_choosers.erase(chooser.player_id)
+	if _choosers.is_empty():
+		_wardrobe_layer.visible = false
+
+
+func _cancel_choosing(chooser: Chooser, player: Player) -> void:
+	# Back discards the unconfirmed preview and restores the previous selection.
+	CharacterCatalog.choose(chooser.player_id, chooser.original_character)
+	CharacterCatalog.choose_color(chooser.player_id, chooser.original_color)
+	player.set_character(chooser.original_character)
+	player.set_color_index(chooser.original_color)
+	player.movement_locked = false
+	player.pop()
+	chooser.panel.queue_free()
+	_choosers.erase(chooser.player_id)
+	if _choosers.is_empty():
+		_wardrobe_layer.visible = false
 
 
 func _refresh_chooser_label(chooser: Chooser, player: Player) -> void:
-	chooser.label.text = "< %s >\nColour: %s\nLeft / Right: animal   Up / Down: colour\nInteract to confirm" % [
-		CharacterCatalog.character_name(player.character), CharacterCatalog.COLOR_NAMES[player.color_index]]
-	chooser.label.modulate = Color.WHITE.lerp(CharacterCatalog.COLORS[player.color_index], 0.55)
+	chooser.character_label.text = CharacterCatalog.character_name(player.character)
+	chooser.color_label.text = CharacterCatalog.COLOR_NAMES[player.color_index]
+	chooser.color_swatch.color = CharacterCatalog.COLORS[player.color_index]
 
 
 func _process(delta: float) -> void:
 	_notice_time = maxf(_notice_time - delta, 0.0)
-	if not _online_menu.visible and not _run_panel.is_open():   # typing, or a card on screen, must not also join players
+	if not _online_menu.visible and not _run_panel.is_open() and _choosers.is_empty():
 		_poll_joins(delta)
 	_update_text()
 
@@ -261,7 +328,7 @@ func _update_text() -> void:
 	for source in _held:
 		lines.append("Joining: %s %d%%" % [InputSetup.short_name(source), roundi(_held[source] / HOLD_TIME * 100.0)])
 	lines.append("")
-	lines.append("Esc or Start: controls, settings, quit")
+	lines.append("Esc / Start: menu  ·  B: back")
 	_status.text = "\n".join(lines)
 
 
