@@ -196,12 +196,21 @@ static func add_stat(grid: GridContainer, left: String, right: String,
 
 ## The "Press X to ..." strip at the bottom of a screen. Returns its label so the text can
 ## change (a typewriter finishing, a lockout ending).
-static func key_prompt(parent: Control, text: String) -> Label:
+static func key_prompt(parent: Control, text: String, show_devices := true) -> Label:
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = &"ButtonPanel"
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", SPACE_S)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	if show_devices:
+		row.add_child(device_image(InputSetup.KB_WASD, Vector2(150, 72)))
+		var pads := Input.get_connected_joypads()
+		var pad_source: int = pads[0] if not pads.is_empty() else -99
+		row.add_child(device_image(pad_source, Vector2(150, 72)))
 	var l := label(text, FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
-	panel.add_child(l)
+	row.add_child(l)
+	panel.add_child(row)
 	parent.add_child(panel)
 	return l
 

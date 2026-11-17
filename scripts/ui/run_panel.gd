@@ -83,7 +83,7 @@ func _show_details() -> void:
 	_content.add_child(continue_button)
 	_content.add_child(UIKit.button("Delete run", _show_confirm))
 	_content.add_child(UIKit.button("Back", close))
-	_content.add_child(UIKit.label("B / Esc to go back", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
+	_content.add_child(UIKit.label("Esc to go back", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
 	continue_button.grab_focus.call_deferred()
 
 
@@ -103,7 +103,6 @@ func _show_confirm() -> void:
 	var keep := UIKit.button("Keep it", _show_details, true)
 	_content.add_child(keep)
 	_content.add_child(UIKit.button("Delete", _delete))
-	_content.add_child(UIKit.label("B / Esc to go back", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
 	keep.grab_focus.call_deferred()
 
 

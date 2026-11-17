@@ -32,7 +32,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_lockout = maxf(0.0, _lockout - delta)
-	(_prompt.get_parent() as Control).modulate.a = 0.5 if _lockout > 0.0 else 1.0   # dim until presses count
+	(_prompt.get_parent().get_parent() as Control).modulate.a = 0.5 if _lockout > 0.0 else 1.0   # dim until presses count
 	for player_id in InputSetup.local_player_ids():
 		var source := InputSetup.source_of(player_id)
 		var pressed := InputSetup.is_interact_pressed(source)
@@ -111,4 +111,4 @@ func _build_ui() -> void:
 
 	var text := "Press %s to return to the main menu" % UIKit.INTERACT_KEYS if GameFlow.is_authority() \
 		else "Waiting for the host to continue"
-	_prompt = UIKit.key_prompt(column, text)
+	_prompt = UIKit.key_prompt(column, text, GameFlow.is_authority())
