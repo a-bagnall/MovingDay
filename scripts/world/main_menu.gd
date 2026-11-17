@@ -24,7 +24,6 @@ var _status: Label
 var _online_menu: OnlineMenu
 var _run_panel: RunPanel
 var _wardrobe_layer: CanvasLayer
-var _wardrobe_root: Control
 var _wardrobe_row: HBoxContainer
 var _slot_zones: Dictionary[int, InteractZone] = {}
 var _choosers: Dictionary[int, Chooser] = {}   # players currently picking a character
@@ -56,7 +55,7 @@ func _ready() -> void:
 	_wardrobe_layer = CanvasLayer.new()
 	_wardrobe_layer.layer = 25
 	add_child(_wardrobe_layer)
-	_wardrobe_root = UIKit.setup(_wardrobe_layer)
+	var wardrobe_root := UIKit.setup(_wardrobe_layer)
 	var wardrobe_dock := CenterContainer.new()
 	wardrobe_dock.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	wardrobe_dock.offset_top = -500.0
@@ -67,7 +66,7 @@ func _ready() -> void:
 	_wardrobe_row.add_theme_constant_override("separation", UIKit.SPACE_M)
 	_wardrobe_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	wardrobe_dock.add_child(_wardrobe_row)
-	_wardrobe_root.visible = false
+	_wardrobe_layer.visible = false
 
 	_run_panel = RunPanel.new()
 	_run_panel.continue_requested.connect(_start_run)
@@ -77,11 +76,6 @@ func _ready() -> void:
 
 func _spawn_point(player_id: int) -> Vector3:
 	return Vector3((player_id - 1.5) * 1.5, 0.1, 3.0)
-
-
-## Lets the global pause menu defer Esc while the wardrobe owns the back action.
-func is_wardrobe_open() -> bool:
-	return not _choosers.is_empty()
 
 
 ## One player's character-picking state: they stand still while left/right cycles
@@ -155,7 +149,7 @@ func _start_choosing(player_id: int) -> void:
 	column.add_child(UIKit.label("A / Interact  Confirm     B / Esc  Cancel",
 		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
 	_wardrobe_row.add_child(chooser.panel)
-	_wardrobe_root.visible = true
+	_wardrobe_layer.visible = true
 
 	player.movement_locked = true
 	player.set_character(CharacterCatalog.choice_for(player_id))
@@ -216,7 +210,7 @@ func _finish_choosing(chooser: Chooser, player: Player) -> void:
 	chooser.panel.queue_free()
 	_choosers.erase(chooser.player_id)
 	if _choosers.is_empty():
-		_wardrobe_root.visible = false
+		_wardrobe_layer.visible = false
 
 
 func _cancel_choosing(chooser: Chooser, player: Player) -> void:
@@ -230,7 +224,7 @@ func _cancel_choosing(chooser: Chooser, player: Player) -> void:
 	chooser.panel.queue_free()
 	_choosers.erase(chooser.player_id)
 	if _choosers.is_empty():
-		_wardrobe_root.visible = false
+		_wardrobe_layer.visible = false
 
 
 func _refresh_chooser_label(chooser: Chooser, player: Player) -> void:

@@ -97,6 +97,7 @@ func _show_main() -> void:
 	if not _in_main_menu():
 		_content.add_child(UIKit.button("Back to main menu", _confirm_leave))
 	_content.add_child(UIKit.button("Quit game", _confirm_quit))
+	_content.add_child(UIKit.label("B / Esc closes this menu", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
 	resume.grab_focus.call_deferred()
 
 
