@@ -154,13 +154,8 @@ func _build_hud(title: String) -> Label:
 
 	column.add_child(UIKit.banner(title, 1300.0))
 
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(spacer)
-
-	# Keep the room guidance anchored to the left edge of the safe area.
-	# A compact note panel reads as part of the same UI system as the other cards.
+	# Keep the room guidance on the left, slightly below the title rather than
+	# pinned to the bottom edge of the screen.
 	var note := PanelContainer.new()
 	note.theme_type_variation = &"NotePanel"
 	note.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -169,11 +164,31 @@ func _build_hud(title: String) -> Label:
 	note.add_child(note_content)
 	note_content.add_child(UIKit.label("ROOM CONTROLS", UIKit.FONT_SMALL,
 		HORIZONTAL_ALIGNMENT_LEFT, &"MutedLabel"))
+
+	# The main-menu join instruction uses the same keycap artwork as the rest
+	# of the game's prompts instead of a long, device-specific sentence.
+	if title == "MOVING DAY!":
+		var join_row := HBoxContainer.new()
+		join_row.add_theme_constant_override("separation", UIKit.SPACE_S)
+		join_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+		join_row.add_child(UIKit.input_glyph(InputSetup.KB_WASD, "interact"))
+		join_row.add_child(UIKit.input_glyph(InputSetup.KB_ARROWS, "interact"))
+		var pads := Input.get_connected_joypads()
+		var pad_source: int = pads[0] if not pads.is_empty() else 0
+		join_row.add_child(UIKit.input_glyph(pad_source, "interact"))
+		join_row.add_child(UIKit.label("JOIN", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel"))
+		note_content.add_child(join_row)
+
 	var status := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel")
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.custom_minimum_size.x = 720
 	note_content.add_child(status)
 	column.add_child(note)
+
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(spacer)
 	return status
 
 
