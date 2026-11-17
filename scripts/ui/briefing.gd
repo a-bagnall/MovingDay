@@ -103,15 +103,20 @@ func _build_previous_panel() -> Control:
 		return panel
 
 	var result := GameFlow.previous_contract_result
-	column.add_child(_contract_label("PROPERTY %02d  |  %s" % [
-		GameFlow.day_contract_count, str(result.get("client_name", "Previous client"))],
+	var outcome := "COMPLETED" if bool(result.get("success", true)) else "CONTRACT FAILED"
+	column.add_child(_contract_label("%s  ·  PROPERTY %02d  |  %s" % [
+		outcome, int(result.get("contract_number", GameFlow.day_contract_count)),
+		str(result.get("client_name", "Previous client"))],
 		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
 	column.add_child(HSeparator.new())
 
 	var rows := _receipt()
 	column.add_child(rows)
-	_receipt_row(rows, "Items delivered", str(result.get("items_delivered", "-")))
+	_receipt_row(rows, "Items delivered", "%d / %d" % [
+		int(result.get("items_delivered", 0)), int(result.get("items_required", result.get("items_delivered", 0)))])
 	_receipt_row(rows, "Completion", "%d%%" % roundi(float(result.get("completion", 0.0)) * 100.0))
+	if float(result.get("failure_penalty", 0.0)) > 0.0:
+		_receipt_row(rows, "Failure penalty", "-" + UIKit.money(float(result.get("failure_penalty", 0.0))), UIKit.PINK)
 	_receipt_row(rows, "Time", UIKit.format_time(float(result.get("time", 0.0))))
 	_receipt_row(rows, "Base pay", UIKit.money(float(result.get("base_pay", 0.0))))
 	_receipt_row(rows, "Time bonus", "+" + UIKit.money(float(result.get("time_bonus", 0.0))), UIKit.SUCCESS)
@@ -144,6 +149,8 @@ func _build_next_panel() -> Control:
 		var rows := _receipt()
 		column.add_child(rows)
 		_receipt_row(rows, "Contracts completed", str(int(GameFlow.day_total.get("contracts_completed", 0))))
+		_receipt_row(rows, "Contracts failed", str(int(GameFlow.day_total.get("contracts_failed", 0))), UIKit.PINK)
+		_receipt_row(rows, "Failure penalties", "-" + UIKit.money(float(GameFlow.day_total.get("failure_penalty", 0.0))), UIKit.PINK)
 		_receipt_row(rows, "Total base pay", UIKit.money(float(GameFlow.day_total.get("base_pay", 0.0))))
 		_receipt_row(rows, "Time bonuses", "+" + UIKit.money(float(GameFlow.day_total.get("time_bonus", 0.0))), UIKit.SUCCESS)
 		_receipt_row(rows, "Style bonuses", "+" + UIKit.money(float(GameFlow.day_total.get("style_bonus", 0.0))), UIKit.SUCCESS)
@@ -157,7 +164,8 @@ func _build_next_panel() -> Control:
 
 	var contract := GameFlow.current_contract
 	column.add_child(_contract_label("NEXT JOB", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-	column.add_child(_contract_label("CONTRACT %02d  |  OFFER: %s" % [contract.contract_number, UIKit.money(contract.payout)],
+	column.add_child(_contract_label("CONTRACT %02d  |  TARGET: %d ITEMS  |  OFFER: %s" % [
+		contract.contract_number, Balance.contract_item_target(contract.contract_number), UIKit.money(contract.payout)],
 		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
 	column.add_child(_contract_label("To: Moving team\nFrom: %s" % contract.client_name, UIKit.FONT_BODY))
 	column.add_child(HSeparator.new())

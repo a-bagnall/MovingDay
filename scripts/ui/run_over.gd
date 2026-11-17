@@ -94,6 +94,7 @@ func _build_ui() -> void:
 	UIKit.add_stat(grid, "Last day's take-home", UIKit.money(float(summary.get("last_take_home", 0.0))))
 	UIKit.add_stat(grid, "Last day's running costs", "-" + UIKit.money(float(summary.get("last_overhead", 0.0))), UIKit.PINK)
 	UIKit.add_stat(grid, "Contracts completed", str(int(summary.get("contracts_completed", 0))))
+	UIKit.add_stat(grid, "Contracts failed", str(int(summary.get("contracts_failed", 0))), UIKit.PINK)
 	UIKit.add_stat(grid, "Total earned", UIKit.money(float(summary.get("total_earned", 0.0))))
 	UIKit.add_stat(grid, "Damage costs", UIKit.money(float(summary.get("total_damage", 0.0))))
 	UIKit.add_stat(grid, "Running costs paid", UIKit.money(float(summary.get("total_overhead", 0.0))))

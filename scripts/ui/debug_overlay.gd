@@ -7,6 +7,7 @@ class_name DebugOverlay
 
 var _panel: PanelContainer
 var _label: Label
+var _balance_panel: PanelContainer
 
 
 func _ready() -> void:
@@ -25,22 +26,31 @@ func _ready() -> void:
 	_label.add_theme_font_size_override("font_size", 16)
 	_panel.add_child(_label)
 	_panel.visible = false
+	_build_balance_panel()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key and key.pressed and not key.echo and key.keycode == KEY_F3:
+	if not key or not key.pressed or key.echo:
+		return
+	if key.keycode == KEY_F3:
 		_panel.visible = not _panel.visible
+	elif key.keycode == KEY_F4:
+		_balance_panel.visible = not _balance_panel.visible
 
 
 func _process(_delta: float) -> void:
 	if not _panel.visible:
 		return
-	var lines: PackedStringArray = ["F3 debug", ""]
+	var lines: PackedStringArray = ["F3 DEBUG  ·  F4 BALANCE LAB", ""]
 	if SaveManager.run != null:
 		lines.append("Run: day %d  wallet $%d  modifiers: %s" % [
 			SaveManager.run.day, roundi(SaveManager.run.wallet),
 			RunModifiers.names(SaveManager.run.modifiers) if not SaveManager.run.modifiers.is_empty() else "none"])
+		lines.append("Contracts: %d attempted / %d completed / %d failed" % [
+			SaveManager.run.contracts_attempted, SaveManager.run.contracts_completed, SaveManager.run.contracts_failed])
+		lines.append("Next target: %d items" % Balance.contract_item_target(SaveManager.run.contracts_attempted + 1))
+		lines.append("Day clock: %.1fs / %.1fs" % [GameFlow.day_time_remaining, Balance.DAY_LENGTH])
 		lines.append("")
 
 	for node in get_tree().get_nodes_in_group("players"):
@@ -64,3 +74,57 @@ func _process(_delta: float) -> void:
 			f.grip_percent(), roundi(f.total_damage), roundi(f.data.value), limit, hit])
 
 	_label.text = "\n".join(lines)
+
+
+
+func _build_balance_panel() -> void:
+	_balance_panel = PanelContainer.new()
+	_balance_panel.position = Vector2(620, 90)
+	_balance_panel.custom_minimum_size = Vector2(560, 900)
+	_balance_panel.size = Vector2(560, 900)
+	_balance_panel.visible = false
+	add_child(_balance_panel)
+
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 8)
+	_balance_panel.add_child(outer)
+	var heading := Label.new()
+	heading.text = "BALANCE LAB  ·  F4"
+	heading.add_theme_font_size_override("font_size", 22)
+	outer.add_child(heading)
+	var note := Label.new()
+	note.text = "Live session values. Day length applies next day; contract targets apply next contract."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.add_theme_font_size_override("font_size", 13)
+	outer.add_child(note)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	outer.add_child(scroll)
+	var controls := VBoxContainer.new()
+	controls.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	controls.add_theme_constant_override("separation", 5)
+	scroll.add_child(controls)
+
+	for setting: Dictionary in Balance.debug_controls():
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		controls.add_child(row)
+		var caption := Label.new()
+		caption.text = str(setting["label"])
+		caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		caption.add_theme_font_size_override("font_size", 14)
+		row.add_child(caption)
+		var spin := SpinBox.new()
+		spin.min_value = float(setting["min"])
+		spin.max_value = float(setting["max"])
+		spin.step = float(setting["step"])
+		spin.value = float(setting["value"])
+		spin.custom_minimum_size.x = 130
+		spin.size_flags_horizontal = Control.SIZE_SHRINK_END
+		spin.value_changed.connect(_on_balance_value_changed.bind(str(setting["id"])))
+		row.add_child(spin)
+
+
+func _on_balance_value_changed(value: float, setting_id: String) -> void:
+	Balance.set_debug_value(setting_id, value)

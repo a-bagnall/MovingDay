@@ -21,7 +21,7 @@ const RUN_OVER_SCENE := "res://scenes/ui/run_over.tscn"
 
 const _SCENES := [MAIN_MENU_SCENE, HUB_SCENE, JOB_SCENE, BRIEFING_SCENE, RUN_OVER_SCENE]
 
-var day_time_remaining := Balance.Balance.DAY_LENGTH
+var day_time_remaining := Balance.DAY_LENGTH
 var day_clock_running := false
 var day_contract_count := 0
 var day_total: Dictionary = {}
@@ -298,7 +298,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		SaveManager.clear_mirror()
 	else:
 		SaveManager.mirror_run(run_data)
-	day_time_remaining = float(snapshot.get("day_time_remaining", Balance.Balance.Balance.DAY_LENGTH))
+	day_time_remaining = float(snapshot.get("day_time_remaining", Balance.DAY_LENGTH))
 	day_clock_running = bool(snapshot.get("day_clock_running", false))
 	day_contract_count = int(snapshot.get("day_contract_count", 0))
 	day_total = snapshot.get("day_total", {})
