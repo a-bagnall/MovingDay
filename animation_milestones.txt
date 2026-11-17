@@ -1,0 +1,184 @@
+MOVING DAY! - CHARACTER ANIMATION MILESTONES
+============================================
+
+Goal: characters that walk like they have real legs (hips swing, knees bend, feet
+plant and lift) while keeping a cartoony, bouncy, plushie feel. Each animal should
+still move differently from the others.
+
+This is a plan only. Nothing here is implemented yet.
+
+
+1. WHERE WE ARE TODAY
+---------------------
+
+How it works now (Player._animate_character in scripts/characters/player.gd):
+- The four plushies (Bear, Bunny, Cat, Dog) are animated entirely in code. Bones
+  are posed every frame by name (LLeg1, LLeg2, LArm1, ...). The Robot plays its
+  own baked Idle and Walk clips and is not touched by the procedural code.
+- One sine wave (_anim_time) drives everything. Legs swing +/-0.55 rad about a single
+  axis. The "knee" (LLeg2/RLeg2) only tucks up to 0.4 rad on the forward swing.
+- The body hops with abs(sin) and squashes and stretches. Per-character "style"
+  numbers (rate, bob, roll, leg, arm, twist, nod, sync) scale the same motion.
+- Idle charm is per animal (Bear breathes, Bunny twitches, Cat sways, Dog wiggles).
+
+Why it looks wrong:
+- Legs are straight sticks swinging from the hip like a pendulum or a toy soldier.
+  The knee tucks in the air but does not bend on contact, so no weight is taken.
+- No foot contact. Nothing decides when a foot is planted, so feet slide on the
+  ground and the hop does not line up with footfalls.
+- Cadence is a fixed rate (7 to 13 Hz) and not tied to ground speed, so fast and
+  slow walking both look like skating.
+- Only one rotation axis per joint. No hip drop, no pelvis rotation, no ankle roll.
+- There are only two states, idle and walk. Starting, stopping, turning, carrying,
+  lifting, shoving and throwing all reuse the same walk with arms layered on top.
+- Procedural motion is tuned by feel with magic numbers, so it is hard to review
+  or to compare between versions.
+
+
+2. DESIGN PRINCIPLES
+--------------------
+
+- Cartoony, not realistic: exaggerate the key poses, keep timing snappy, accept a
+  little squash and stretch. The knees bend like a real walk, but more.
+- Contact, passing, and apex are the three poses that sell a walk. Build those, then
+  blend between them.
+- Speed drives everything: stride length and cadence come from real ground speed so
+  feet do not slide.
+- One shared walk engine, per-character personality as data (tuning tables), not
+  per-character code branches.
+- Never fight gameplay: animation is visual only. Collision, grab points and
+  furniture carry positions must not change because a knee moved.
+- Network safe: animation is derived on every machine from the velocity and state
+  the game already syncs. No new network fields.
+- Keep it measurable: every milestone ends with a repeatable check (frame strips
+  or captured poses) so we can compare before and after.
+
+
+3. MILESTONES
+-------------
+
+M0  Reference and test harness (small)
+    - Build a debug scene (or a dev flag) that shows all five characters walking in
+      place at slow, medium and full speed, side-on and iso camera, with a ground grid.
+    - Add a headless capture script that renders a strip of N frames across one walk
+      cycle per character and saves PNGs. This is how every later milestone is checked.
+    - Record the current walk as the baseline strip to compare against.
+    - Write down bone names, rest poses and axes for each plushie rig (the rig is
+      keyed by name suffix and posed in model axes, see _build_rig and _pose_bone).
+    Done when: one command produces a before/after contact sheet for any character.
+
+M1  Real walk cycle for the plushies (core milestone)
+    - Replace the single swing with a proper two-leg phase: contact, down, passing,
+      up, per leg, half a cycle apart.
+    - Hip (Leg1) swings forward and back; knee (Leg2) bends on the down/passing pose
+      to absorb weight and straightens at contact; added ankle/foot pitch if the rig
+      has foot bones, otherwise fake it with a little leg counter-rotation.
+    - Body bob follows the legs: lowest at the down pose, highest at passing, not an
+      abs(sin) hop detached from the feet.
+    - Hip sway and pelvis yaw so the walk reads from the iso camera angle.
+    - Keep exaggeration dials (knee bend, bob, squash) in the style table.
+    Done when: from the iso camera and from the side, the contact sheet shows a knee
+    visibly bending and straightening each step, and no leg is a rigid stick.
+
+M2  Speed-matched stride and foot planting
+    - Cadence and stride length derived from ground speed (steps per metre), clamped
+      to a cartoon-friendly range. Slow walk = small slow steps, run = long quick ones.
+    - Phase accumulates by distance travelled, not by time, so standing still never
+      advances the cycle and a stop freezes on a valid pose.
+    - Measure foot slide in the capture harness (planted foot world position over the
+      stance phase) and tune until slide is below a small threshold.
+    - Optional: simple two-bone IK for the planted foot if FK alone cannot hold it.
+    Done when: foot slide on flat ground is under an agreed threshold at all speeds.
+
+M3  Starts, stops and turns
+    - Start step: a short lean-in and first-step anticipation instead of snapping into
+      the cycle.
+    - Stop: settle with a small overshoot and a brief double-support, then blend to idle.
+    - Turning: lead with the head, then chest, then hips; bank into sharp turns; small
+      pivot steps when changing direction while nearly stationary.
+    - Reuse the existing lean/bank from acceleration, but feed it through the new poses.
+    Done when: stop-start and 180 degree turns show no pop and no skating in the strips.
+
+M4  Carrying, lifting, shoving and throwing
+    - Carry: wider, lower stance with a slight lean back, shorter steps, knees bent more.
+      Heavier furniture = more effort. Hands stay on the grab points.
+    - Lift (hold trigger): crouch-and-raise pose, then the same carry walk.
+    - Shove: a real lunge (rear leg pushes off, front knee bends) rather than just
+      arms out.
+    - Throw: wind-up lean back, throw forward, follow-through, recover.
+    - Heave-ho (shared lift): the straining pose from the heave mechanic.
+    - Two or more players carrying the same piece should visibly step in sympathy.
+    Done when: each action has its own readable silhouette in the capture strips.
+
+M5  Per-character personality as data
+    - Move the existing style numbers into a richer table per animal: cadence, stride,
+      knee bend, bob, hip sway, head lag, arm swing, squash, plus a "gait" flag.
+    - Bear: heavy, wide, slow, big head bob.
+    - Bunny: hops with both legs together, long airtime, soft landings.
+    - Cat: narrow, smooth, hips lead, low bob, tail-less sway.
+    - Dog: quick eager trot, bouncy, wiggly hips.
+    - Keep and refine the idle charm (breathing, nose twitch, tail-wag hips, paw pat).
+    Done when: with the character names hidden, each animal is identifiable by gait.
+
+M6  Secondary motion
+    - Overlap and follow-through for ears, head and any floppy parts: lag behind the
+      body and settle after a stop. Simple spring or damped follow on selected bones.
+    - Squash and stretch on landings and when braking hard.
+    - Small anticipation and recovery on grab and drop.
+    Done when: stopping dead produces a visible settle rather than a freeze.
+
+M7  Robot parity
+    - The robot uses baked clips. Decide: keep the clips and add procedural layers
+      (carry arms, lean, bank, shove, throw), or retarget the new walk onto it.
+    - Make its stride speed-matched like the others so it does not skate.
+    - Give it the same carry, lift, shove and throw poses so it is not the odd one out.
+    Done when: all five characters respond to every gameplay state.
+
+M8  Polish, performance and safety
+    - Profile with four players on screen. Animation must stay cheap (bone poses only,
+      no allocations per frame in hot paths).
+    - Sleep animation for characters that are far off screen (cutaway view).
+    - Verify online play: remote players animate correctly from synced velocity and
+      state, with no jitter on snapshot updates.
+    - Re-check every gameplay mechanic that touches the model: grab positions, throw
+      origin, ping marker, colour ring, sticky links, slip patches.
+    - Final tuning pass with the whole team on a real controller.
+    Done when: nothing regresses and a playtest with four players feels good.
+
+
+4. SUGGESTED ORDER AND SIZE
+---------------------------
+
+M0 (small) -> M1 (large, the big visible win) -> M2 (medium) -> M3 (medium) ->
+M4 (large) -> M5 (medium) -> M6 (small/medium) -> M7 (medium) -> M8 (small).
+
+Ship M0 + M1 first and playtest before going further. M1 alone fixes most of the
+"stiff legs" complaint. M2 and M3 remove the sliding and the pops. M4 to M7 are
+where the game's actions and the characters' personality come in.
+
+
+5. OPEN QUESTIONS FOR YOU
+-------------------------
+
+1. How exaggerated? "Plushie waddle" (big knee bend, big bob) or "believable with a
+   wink" (realistic proportions, small exaggeration)?
+2. Do the plushie rigs have foot bones? If not, we fake ankle motion by counter-
+   rotating the lower leg, and IK planting (M2) is harder.
+3. Robot: keep its baked clips with procedural layers on top, or rebuild it to match?
+4. Should two players carrying one item step in sympathy (M4), or is that too fussy?
+5. Is there a running state in the game, or is walk speed the only locomotion? Running
+   would add its own gait.
+6. Any hard limit on how long this takes before the next playtest?
+
+
+6. RISKS
+--------
+
+- Plushie rigs are keyed by bone-name suffix and posed in model axes. A rig with
+  odd bone orientation can make a naive rotation look wrong. M0 documents each rig.
+- Heavy procedural posing is easy to over-tune. The capture harness and the style
+  table keep changes reviewable.
+- Online: remote players only see velocity and state, so any animation that needs
+  extra information (for example, exact foot positions) must be derived locally.
+- Collision capsule size must not change with the animation, or furniture handling
+  will feel different.
