@@ -1,0 +1,916 @@
+From f7947784609b7952f1b7b4fc95490c509a031c89 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 17 Nov 2026 14:14:37 +1100
+Subject: [PATCH] feat(ui): professional UI overhaul with a shared component
+ kit
+
+Design system (ui_kit.gd)
+- Add spacing scale, SUCCESS/MUTED colours and a MutedLabel style
+- Add reusable components: banner, button, stat_grid/add_stat, key_prompt,
+  progress_bar, fade_in
+- Add PrimaryButton (gold text) and ProgressBar theme styles
+- Screens fade in; buttons move focus on hover so mouse, keyboard and
+  gamepad never highlight two things at once
+
+Screens
+- Lobby: one card per player slot (WAITING / JOINING / NOT READY / READY)
+  with short device names, and a countdown that says how to cancel
+- Briefing: receipts are aligned tables with green bonuses, pink damage and
+  a gold total; day status shown as chips
+- Run over: headline numbers first, then breakdown; prompt dims during the
+  input lockout
+- Run panel / online menu: shared components, primary action, Esc hints,
+  roster as a table, errors in pink
+- Modifier picker: warning-coloured subtitle, hover focus, muted hint
+- Job HUD: delivery progress bar, day clock turns gold then pink as it runs
+  down, full controls reminder (lift, action, heave-ho)
+
+Colour is never the only signal: every state also has text.
+---
+ scripts/contracts/contract_tracker.gd |  19 +++-
+ scripts/ui/briefing.gd                | 120 +++++++++++++----------
+ scripts/ui/lobby.gd                   | 110 ++++++++++++++++-----
+ scripts/ui/modifier_picker.gd         |   5 +-
+ scripts/ui/online_menu.gd             |  26 ++---
+ scripts/ui/run_over.gd                |  66 ++++++-------
+ scripts/ui/run_panel.gd               |  54 ++++-------
+ scripts/ui/ui_kit.gd                  | 135 +++++++++++++++++++++++++-
+ scripts/world/walkable_area.gd        |   7 +-
+ 9 files changed, 375 insertions(+), 167 deletions(-)
+
+diff --git a/scripts/contracts/contract_tracker.gd b/scripts/contracts/contract_tracker.gd
+index 9b094e3..5e35a8e 100644
+--- a/scripts/contracts/contract_tracker.gd
++++ b/scripts/contracts/contract_tracker.gd
+@@ -20,6 +20,7 @@ var _delivered_value: Label
+ var _damage_value: Label
+ var _time_value: Label
+ var _day_value: Label
++var _delivered_bar: ProgressBar
+ 
+ 
+ func setup(delivery_zone: DeliveryZone, items: Array[Furniture], job_contract: Contract = null) -> void:
+@@ -66,7 +67,7 @@ func _build_ui() -> void:
+ 	bar.add_theme_constant_override("separation", 24)
+ 	bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+ 	column.add_child(bar)
+-	_delivered_value = _add_chip(bar, "DELIVERED")
++	_delivered_value = _add_chip(bar, "DELIVERED", true)
+ 	_damage_value = _add_chip(bar, "DAMAGE")
+ 	_time_value = _add_chip(bar, "JOB TIME")
+ 	_day_value = _add_chip(bar, "DAY LEFT")
+@@ -79,12 +80,13 @@ func _build_ui() -> void:
+ 	var hint := PanelContainer.new()
+ 	hint.theme_type_variation = &"NotePanel"
+ 	hint.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+-	hint.add_child(UIKit.label("Grab / drop: %s" % UIKit.INTERACT_KEYS, UIKit.FONT_SMALL,
+-		HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel"))
++	hint.add_child(UIKit.label("Grab / drop: %s\nLift: %s\nAction: %s\nHeave-ho: %s" % [
++		UIKit.INTERACT_KEYS, UIKit.LIFT_KEYS, UIKit.ACTION_KEYS, UIKit.HEAVE_KEYS],
++		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel"))
+ 	column.add_child(hint)
+ 
+ 
+-func _add_chip(bar: HBoxContainer, caption: String) -> Label:
++func _add_chip(bar: HBoxContainer, caption: String, with_progress: bool = false) -> Label:
+ 	var panel := PanelContainer.new()
+ 	panel.custom_minimum_size = Vector2(400, 0)
+ 	var box := VBoxContainer.new()
+@@ -93,6 +95,9 @@ func _add_chip(bar: HBoxContainer, caption: String) -> Label:
+ 	box.add_child(UIKit.label(caption, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+ 	var value := UIKit.label("", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER)
+ 	box.add_child(value)
++	if with_progress:
++		_delivered_bar = UIKit.progress_bar(UIKit.SUCCESS)
++		box.add_child(_delivered_bar)
+ 	bar.add_child(panel)
+ 	return value
+ 
+@@ -110,6 +115,12 @@ func _process(delta: float) -> void:
+ 	_day_value.text = UIKit.format_time(GameFlow.day_time_remaining)
+ 	_damage_value.add_theme_color_override("font_color",
+ 		UIKit.PINK if damage > 0.5 else UIKit.CREAM)
++	_delivered_bar.max_value = maxf(float(required.size()), 1.0)
++	_delivered_bar.value = float(delivered)
++	# The day clock turns gold, then pink, as it runs down.
++	var day_left := GameFlow.day_time_remaining
++	_day_value.add_theme_color_override("font_color",
++		UIKit.PINK if day_left < 60.0 else (UIKit.GOLD if day_left < 120.0 else UIKit.CREAM))
+ 
+ 	# The host decides when the job is over; clients follow it to the briefing.
+ 	if delivered >= required.size() and required.size() > 0 and GameFlow.is_authority():
+diff --git a/scripts/ui/briefing.gd b/scripts/ui/briefing.gd
+index 9ff6d6f..d8edbcc 100644
+--- a/scripts/ui/briefing.gd
++++ b/scripts/ui/briefing.gd
+@@ -43,35 +43,28 @@ func _build_ui() -> void:
+ 	root.add_child(center)
+ 
+ 	var column := VBoxContainer.new()
+-	column.add_theme_constant_override("separation", 18)
++	column.add_theme_constant_override("separation", UIKit.SPACE_M)
+ 	column.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+ 	center.add_child(column)
+ 
+-	var banner := PanelContainer.new()
+-	banner.theme_type_variation = &"BannerPanel"
+-	banner.custom_minimum_size = Vector2(2700, 0)
+-	banner.add_child(UIKit.label("DISPATCH OFFICE", UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
+-	column.add_child(banner)
++	column.add_child(UIKit.banner("DISPATCH OFFICE", 2700.0))
+ 
+-	var subtitle := "DAY %d  |  %s REMAINING  |  %d CONTRACTS COMPLETED" % [
+-		SaveManager.run.day,
+-		UIKit.format_time(GameFlow.day_time_remaining),
+-		GameFlow.day_contract_count,
+-	]
+-	column.add_child(UIKit.label(subtitle, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
++	# Day status as three chips: scannable at a glance, not one long run-on line.
++	var status := HBoxContainer.new()
++	status.add_theme_constant_override("separation", UIKit.SPACE_M)
++	status.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
++	status.add_child(UIKit.chip("DAY %d" % SaveManager.run.day, UIKit.GOLD))
++	status.add_child(UIKit.chip("%s LEFT" % UIKit.format_time(GameFlow.day_time_remaining), UIKit.CREAM))
++	status.add_child(UIKit.chip("%d DONE" % GameFlow.day_contract_count, UIKit.CREAM))
++	column.add_child(status)
+ 
+ 	var panels := HBoxContainer.new()
+-	panels.add_theme_constant_override("separation", 20)
++	panels.add_theme_constant_override("separation", UIKit.SPACE_M)
+ 	column.add_child(panels)
+ 	panels.add_child(_build_previous_panel())
+ 	panels.add_child(_build_next_panel())
+ 
+-	var prompt := PanelContainer.new()
+-	prompt.theme_type_variation = &"ButtonPanel"
+-	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+-	_continue_label = UIKit.label("Press %s to skip the letter" % UIKit.INTERACT_KEYS, UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
+-	prompt.add_child(_continue_label)
+-	column.add_child(prompt)
++	_continue_label = UIKit.key_prompt(column, "Press %s to skip the letter" % UIKit.INTERACT_KEYS)
+ 
+ 
+ func _contract_label(text: String, size: int = UIKit.FONT_BODY,
+@@ -81,64 +74,93 @@ func _contract_label(text: String, size: int = UIKit.FONT_BODY,
+ 	return label
+ 
+ 
++## A receipt table in the paper font: muted labels, values on the right.
++func _receipt() -> GridContainer:
++	var grid := UIKit.stat_grid()
++	grid.add_theme_constant_override("v_separation", 8)
++	return grid
++
++
++func _receipt_row(grid: GridContainer, left: String, right: String,
++		color: Color = UIKit.CREAM) -> void:
++	UIKit.add_stat(grid, left, right, color, UIKit.paper_font())
++
++
+ func _build_previous_panel() -> Control:
+ 	var panel := PanelContainer.new()
+ 	panel.custom_minimum_size = Vector2(1340, 1000)
++	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+ 	var column := VBoxContainer.new()
+-	column.add_theme_constant_override("separation", 14)
++	column.add_theme_constant_override("separation", UIKit.SPACE_S)
+ 	panel.add_child(column)
+ 
+ 	column.add_child(_contract_label("PREVIOUS PROPERTY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+ 	if GameFlow.previous_contract_result.is_empty():
+ 		column.add_child(_contract_label("FIRST JOB OF THE DAY", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
+-		column.add_child(_contract_label("No previous property completed yet.\n\nYour team's results will appear here after each move.", UIKit.FONT_BODY))
++		var empty := _contract_label("No previous property completed yet.\n\nYour team's results will appear here after each move.", UIKit.FONT_BODY)
++		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
++		column.add_child(empty)
+ 		return panel
+ 
+ 	var result := GameFlow.previous_contract_result
+-	var receipt := _contract_label("PROPERTY %02d\n%s\n--------------------------------\nItems delivered: %s\nCompletion: %d%%\nTime: %s\nBase pay: %s\nTime bonus: +%s\nStyle bonus: +%s\nDamage: -%s\n--------------------------------\nPAYMENT: %s" % [
+-		GameFlow.day_contract_count,
+-		str(result.get("client_name", "Previous client")),
+-		str(result.get("items_delivered", "-")),
+-		roundi(float(result.get("completion", 0.0)) * 100.0),
+-		UIKit.format_time(float(result.get("time", 0.0))),
+-		UIKit.money(float(result.get("base_pay", 0.0))),
+-		UIKit.money(float(result.get("time_bonus", 0.0))),
+-		UIKit.money(float(result.get("style_bonus", 0.0))),
+-		UIKit.money(float(result.get("damage", 0.0))),
+-		UIKit.money(float(result.get("payment", 0.0))),
+-	])
+-	receipt.size_flags_vertical = Control.SIZE_EXPAND_FILL
+-	column.add_child(receipt)
++	column.add_child(_contract_label("PROPERTY %02d  |  %s" % [
++		GameFlow.day_contract_count, str(result.get("client_name", "Previous client"))],
++		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
++	column.add_child(HSeparator.new())
++
++	var rows := _receipt()
++	column.add_child(rows)
++	_receipt_row(rows, "Items delivered", str(result.get("items_delivered", "-")))
++	_receipt_row(rows, "Completion", "%d%%" % roundi(float(result.get("completion", 0.0)) * 100.0))
++	_receipt_row(rows, "Time", UIKit.format_time(float(result.get("time", 0.0))))
++	_receipt_row(rows, "Base pay", UIKit.money(float(result.get("base_pay", 0.0))))
++	_receipt_row(rows, "Time bonus", "+" + UIKit.money(float(result.get("time_bonus", 0.0))), UIKit.SUCCESS)
++	_receipt_row(rows, "Style bonus", "+" + UIKit.money(float(result.get("style_bonus", 0.0))), UIKit.SUCCESS)
++	var damage := float(result.get("damage", 0.0))
++	_receipt_row(rows, "Damage", "-" + UIKit.money(damage), UIKit.PINK if damage > 0.5 else UIKit.CREAM)
++
++	column.add_child(HSeparator.new())
++	var total := _receipt()
++	column.add_child(total)
++	_receipt_row(total, "PAYMENT", UIKit.money(float(result.get("payment", 0.0))), UIKit.GOLD)
+ 	return panel
+ 
+ 
+ func _build_next_panel() -> Control:
+ 	var panel := PanelContainer.new()
+ 	panel.custom_minimum_size = Vector2(1340, 1000)
++	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+ 	var column := VBoxContainer.new()
+-	column.add_theme_constant_override("separation", 14)
++	column.add_theme_constant_override("separation", UIKit.SPACE_S)
+ 	panel.add_child(column)
+ 
+ 	if GameFlow.current_contract == null:
+ 		column.add_child(_contract_label("END OF DAY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+-		column.add_child(_contract_label("No more contracts today. Your team has finished the shift.", UIKit.FONT_BODY))
+-		column.add_child(_contract_label("DAY TOTAL", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+-		column.add_child(_contract_label("Contracts completed: %d\nTotal base pay: %s\nTime bonuses: %s\nStyle bonuses: %s\nDamage costs: -%s\n\nTAKE-HOME: %s" % [
+-			int(GameFlow.day_total.get("contracts_completed", 0)),
+-			UIKit.money(float(GameFlow.day_total.get("base_pay", 0.0))),
+-			UIKit.money(float(GameFlow.day_total.get("time_bonus", 0.0))),
+-			UIKit.money(float(GameFlow.day_total.get("style_bonus", 0.0))),
+-			UIKit.money(float(GameFlow.day_total.get("damage", 0.0))),
+-			UIKit.money(float(GameFlow.day_total.get("payment", 0.0))),
+-		], UIKit.FONT_BODY))
++		var done := _contract_label("No more contracts today. Your team has finished the shift.", UIKit.FONT_BODY)
++		done.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
++		column.add_child(done)
++		column.add_child(HSeparator.new())
++		column.add_child(_contract_label("DAY TOTAL", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
++		var rows := _receipt()
++		column.add_child(rows)
++		_receipt_row(rows, "Contracts completed", str(int(GameFlow.day_total.get("contracts_completed", 0))))
++		_receipt_row(rows, "Total base pay", UIKit.money(float(GameFlow.day_total.get("base_pay", 0.0))))
++		_receipt_row(rows, "Time bonuses", "+" + UIKit.money(float(GameFlow.day_total.get("time_bonus", 0.0))), UIKit.SUCCESS)
++		_receipt_row(rows, "Style bonuses", "+" + UIKit.money(float(GameFlow.day_total.get("style_bonus", 0.0))), UIKit.SUCCESS)
++		var damage := float(GameFlow.day_total.get("damage", 0.0))
++		_receipt_row(rows, "Damage costs", "-" + UIKit.money(damage), UIKit.PINK if damage > 0.5 else UIKit.CREAM)
++		column.add_child(HSeparator.new())
++		var total := _receipt()
++		column.add_child(total)
++		_receipt_row(total, "TAKE-HOME", UIKit.money(float(GameFlow.day_total.get("payment", 0.0))), UIKit.GOLD)
+ 		return panel
+ 
+ 	var contract := GameFlow.current_contract
+ 	column.add_child(_contract_label("NEXT JOB", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+-	column.add_child(_contract_label("CONTRACT %02d  |  OFFER: %s" % [contract.contract_number, UIKit.money(contract.payout)], UIKit.FONT_SMALL))
++	column.add_child(_contract_label("CONTRACT %02d  |  OFFER: %s" % [contract.contract_number, UIKit.money(contract.payout)],
++		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+ 	column.add_child(_contract_label("To: Moving team\nFrom: %s" % contract.client_name, UIKit.FONT_BODY))
+-	var divider := HSeparator.new()
+-	column.add_child(divider)
++	column.add_child(HSeparator.new())
+ 	_letter = _contract_label("")
+ 	_letter.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+ 	_letter.size_flags_vertical = Control.SIZE_EXPAND_FILL
+diff --git a/scripts/ui/lobby.gd b/scripts/ui/lobby.gd
+index f36ff63..5b75edc 100644
+--- a/scripts/ui/lobby.gd
++++ b/scripts/ui/lobby.gd
+@@ -15,7 +15,8 @@ var _held: Dictionary[int, float] = {}
+ var _was_pressed: Dictionary[int, bool] = {}
+ var _ready_flags: Array[bool] = []
+ var _countdown := -1.0
+-var _label: Label
++var _hint: Label
++var _cards: Array[Dictionary] = []   # per slot: {panel, name, device, state}
+ 
+ 
+ func _ready() -> void:
+@@ -31,21 +32,46 @@ func _ready() -> void:
+ 	root.add_child(center)
+ 
+ 	var column := VBoxContainer.new()
+-	column.add_theme_constant_override("separation", 28)
++	column.add_theme_constant_override("separation", UIKit.SPACE_L)
+ 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+ 	center.add_child(column)
+ 
+-	var banner := PanelContainer.new()
+-	banner.theme_type_variation = &"BannerPanel"
+-	banner.custom_minimum_size = Vector2(1300, 0)
+-	banner.add_child(UIKit.label("MOVING DAY!", UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
+-	column.add_child(banner)
++	column.add_child(UIKit.banner("MOVING DAY!", 1300.0))
+ 
++	# One card per player slot, so who is in and who is ready reads at a glance.
++	var row := HBoxContainer.new()
++	row.add_theme_constant_override("separation", UIKit.SPACE_M)
++	row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
++	column.add_child(row)
++	for player_id in range(1, InputSetup.MAX_PLAYERS + 1):
++		row.add_child(_build_card(player_id))
++
++	var note := PanelContainer.new()
++	note.theme_type_variation = &"NotePanel"
++	note.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
++	_hint = UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER, &"DarkLabel")
++	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
++	_hint.custom_minimum_size.x = 1700   # fixed width so the countdown does not resize the card
++	note.add_child(_hint)
++	column.add_child(note)
++
++
++func _build_card(player_id: int) -> Control:
+ 	var panel := PanelContainer.new()
+-	panel.custom_minimum_size = Vector2(1300, 0)
+-	_label = UIKit.label("", UIKit.FONT_BODY)
+-	panel.add_child(_label)
+-	column.add_child(panel)
++	panel.custom_minimum_size = Vector2(300, 360)
++	var box := VBoxContainer.new()
++	box.add_theme_constant_override("separation", UIKit.SPACE_S)
++	panel.add_child(box)
++	var name_label := UIKit.label("P%d" % player_id, UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER)
++	box.add_child(name_label)
++	var device := UIKit.label("", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
++	device.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
++	device.size_flags_vertical = Control.SIZE_EXPAND_FILL
++	box.add_child(device)
++	var state := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
++	box.add_child(state)
++	_cards.append({"panel": panel, "device": device, "state": state})
++	return panel
+ 
+ 
+ func _process(delta: float) -> void:
+@@ -96,20 +122,52 @@ func _update_countdown(delta: float) -> void:
+ 
+ 
+ func _update_text() -> void:
+-	var lines := PackedStringArray()
+-	if InputSetup.assigned_count() < InputSetup.MAX_PLAYERS:
+-		lines.append("Hold E, Enter or gamepad A to join")
+-	lines.append("Press your interact button to ready up")
+-	lines.append("")
+-	for player_id in range(1, InputSetup.MAX_PLAYERS + 1):
+-		if player_id <= InputSetup.assigned_count():
+-			var state := "READY" if _ready_flags[player_id - 1] else "not ready"
+-			lines.append("Player %d: %s - %s" % [player_id, InputSetup.describe(InputSetup.source_of(player_id)), state])
++	var joined := InputSetup.assigned_count()
++	for i in _cards.size():
++		var card: Dictionary = _cards[i]
++		var device: Label = card["device"]
++		var state: Label = card["state"]
++		var panel: Control = card["panel"]
++		var player_id := i + 1
++		var joining := _joining_text()
++		if player_id <= joined:
++			var player_ready: bool = _ready_flags[i]
++			device.text = _device_name(InputSetup.source_of(player_id))
++			state.text = "READY" if player_ready else "NOT READY"
++			state.add_theme_color_override("font_color", UIKit.SUCCESS if player_ready else UIKit.PINK)
++			panel.modulate.a = 1.0
++		elif player_id == joined + 1 and not joining.is_empty():
++			device.text = joining
++			state.text = "JOINING"
++			state.add_theme_color_override("font_color", UIKit.GOLD)
++			panel.modulate.a = 1.0
+ 		else:
+-			lines.append("Player %d: waiting..." % player_id)
+-	for source in _held:
+-		lines.append("Joining: %s %d%%" % [InputSetup.describe(source), roundi(_held[source] / HOLD_TIME * 100.0)])
++			device.text = ""
++			state.text = "WAITING"
++			state.add_theme_color_override("font_color", UIKit.MUTED)
++			panel.modulate.a = 0.55   # an empty slot recedes
++
++	var lines := PackedStringArray()
+ 	if _countdown >= 0.0:
+-		lines.append("")
+-		lines.append("Starting in %d" % ceili(_countdown))
+-	_label.text = "\n".join(lines)
++		lines.append("Starting in %d. Press %s to cancel." % [ceili(_countdown), UIKit.INTERACT_KEYS])
++	else:
++		if joined < InputSetup.MAX_PLAYERS:
++			lines.append("Hold %s to join" % UIKit.INTERACT_KEYS)
++		lines.append("Press %s to ready up. The job starts when everyone is ready." % UIKit.INTERACT_KEYS)
++	_hint.text = "\n".join(lines)
++
++
++## "Keyboard 1  45%" for whichever source is currently holding to join, or "".
++func _joining_text() -> String:
++	for source in _held:
++		return "%s\n%d%%" % [_device_name(source), roundi(_held[source] / HOLD_TIME * 100.0)]
++	return ""
++
++
++## A short name that fits a card; the full control list is in the README.
++func _device_name(source: int) -> String:
++	if source == InputSetup.KB_WASD:
++		return "Keyboard\nWASD + E"
++	if source == InputSetup.KB_ARROWS:
++		return "Keyboard\nArrows + Enter"
++	return "Gamepad\n%s" % Input.get_joy_name(source)
+diff --git a/scripts/ui/modifier_picker.gd b/scripts/ui/modifier_picker.gd
+index 0378e28..e515c0b 100644
+--- a/scripts/ui/modifier_picker.gd
++++ b/scripts/ui/modifier_picker.gd
+@@ -33,6 +33,7 @@ func open(ids: Array[String]) -> void:
+ 	var sub := UIKit.label("Every pick makes the run harder, and it stays until the run ends.",
+ 		UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
+ 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
++	sub.add_theme_color_override("font_color", UIKit.PINK)   # a warning: every pick has a cost
+ 	content.add_child(sub)
+ 
+ 	var row := HBoxContainer.new()
+@@ -49,6 +50,8 @@ func open(ids: Array[String]) -> void:
+ 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+ 		button.focus_mode = Control.FOCUS_ALL
+ 		button.pressed.connect(_on_pressed.bind(id))
++		# Hovering moves focus, so mouse and keyboard never highlight two cards at once.
++		button.mouse_entered.connect(button.grab_focus)
+ 		row.add_child(button)
+ 		if first == null:
+ 			first = button
+@@ -60,7 +63,7 @@ func open(ids: Array[String]) -> void:
+ 		stacked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+ 		content.add_child(stacked)
+ 	content.add_child(UIKit.label("Left / Right to look, Enter or gamepad A to pick",
+-		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
++		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
+ 
+ 	visible = true
+ 	InputSetup.ui_captured = true
+diff --git a/scripts/ui/online_menu.gd b/scripts/ui/online_menu.gd
+index ac36377..f230155 100644
+--- a/scripts/ui/online_menu.gd
++++ b/scripts/ui/online_menu.gd
+@@ -74,6 +74,7 @@ func _refresh() -> void:
+ 		_build_offline()
+ 	if not _status.is_empty():
+ 		var status := UIKit.label(_status, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER)
++		status.add_theme_color_override("font_color", UIKit.PINK)
+ 		status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+ 		_content.add_child(status)
+ 
+@@ -81,17 +82,19 @@ func _refresh() -> void:
+ func _build_offline() -> void:
+ 	_content.add_child(UIKit.label("Host a game, or join a friend by address",
+ 		UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
+-	_content.add_child(_button("Host game", _on_host_pressed))
++	_content.add_child(UIKit.button("Host game", _on_host_pressed, true))
+ 
+ 	_address_edit = LineEdit.new()
+ 	_address_edit.placeholder_text = "Host address, e.g. 192.168.1.20 or 203.0.113.5:%d" % NetworkManager.DEFAULT_PORT
+ 	_address_edit.text = _address_text
+ 	_address_edit.add_theme_font_size_override("font_size", UIKit.FONT_BODY)
++	_address_edit.custom_minimum_size.y = 120
+ 	_address_edit.text_changed.connect(func(text: String) -> void: _address_text = text)
+ 	_address_edit.text_submitted.connect(func(_text: String) -> void: _on_join_pressed())
+ 	_content.add_child(_address_edit)
+-	_content.add_child(_button("Join game", _on_join_pressed))
+-	_content.add_child(_button("Close", close))
++	_content.add_child(UIKit.button("Join game", _on_join_pressed))
++	_content.add_child(UIKit.button("Close", close))
++	_content.add_child(_esc_hint())
+ 
+ 
+ func _build_session() -> void:
+@@ -105,13 +108,15 @@ func _build_session() -> void:
+ 		for peer_id: int in roster:
+ 			for player_id: int in roster[peer_id]:
+ 				owner_of[player_id] = peer_id
++		var roster_grid := UIKit.stat_grid()
++		_content.add_child(roster_grid)
+ 		for player_id in range(1, InputSetup.MAX_PLAYERS + 1):
+ 			if not owner_of.has(player_id):
+ 				continue
+ 			var peer_id: int = owner_of[player_id]
+ 			var where := "this computer" if peer_id == multiplayer.get_unique_id() \
+ 				else ("the host" if peer_id == 1 else "a friend")
+-			_content.add_child(UIKit.label("Player %d  -  %s" % [player_id, where], UIKit.FONT_BODY))
++			UIKit.add_stat(roster_grid, "Player %d" % player_id, where)
+ 		if NetworkManager.player_count() == 0:
+ 			_content.add_child(UIKit.label("Nobody has joined yet. Hold %s in the room to join." % UIKit.INTERACT_KEYS,
+ 				UIKit.FONT_SMALL))
+@@ -120,8 +125,9 @@ func _build_session() -> void:
+ 		var help := UIKit.label(_host_help(), UIKit.FONT_SMALL)
+ 		help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+ 		_content.add_child(help)
+-	_content.add_child(_button("Close", close))
+-	_content.add_child(_button("Disconnect", _on_disconnect_pressed))
++	_content.add_child(UIKit.button("Close", close, true))
++	_content.add_child(UIKit.button("Disconnect", _on_disconnect_pressed))
++	_content.add_child(_esc_hint())
+ 
+ 
+ ## What the host tells their friends, based on how the router port forwarding went.
+@@ -147,11 +153,9 @@ func _host_help() -> String:
+ 	return same_network
+ 
+ 
+-func _button(text: String, on_pressed: Callable) -> Button:
+-	var button := Button.new()
+-	button.text = text
+-	button.pressed.connect(on_pressed)
+-	return button
++func _esc_hint() -> Label:
++	return UIKit.label("Esc to close", UIKit.FONT_SMALL,
++		HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
+ 
+ 
+ # --- actions --------------------------------------------------------------
+diff --git a/scripts/ui/run_over.gd b/scripts/ui/run_over.gd
+index a665632..60f54ba 100644
+--- a/scripts/ui/run_over.gd
++++ b/scripts/ui/run_over.gd
+@@ -32,6 +32,7 @@ func _ready() -> void:
+ 
+ func _process(delta: float) -> void:
+ 	_lockout = maxf(0.0, _lockout - delta)
++	(_prompt.get_parent() as Control).modulate.a = 0.5 if _lockout > 0.0 else 1.0   # dim until presses count
+ 	for player_id in InputSetup.local_player_ids():
+ 		var source := InputSetup.source_of(player_id)
+ 		var pressed := InputSetup.is_interact_pressed(source)
+@@ -58,14 +59,10 @@ func _build_ui() -> void:
+ 	root.add_child(center)
+ 
+ 	var column := VBoxContainer.new()
+-	column.add_theme_constant_override("separation", 22)
++	column.add_theme_constant_override("separation", UIKit.SPACE_M)
+ 	center.add_child(column)
+ 
+-	var banner := PanelContainer.new()
+-	banner.theme_type_variation = &"BannerPanel"
+-	banner.custom_minimum_size = Vector2(1700, 0)
+-	banner.add_child(UIKit.label(str(cause["title"]), UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
+-	column.add_child(banner)
++	column.add_child(UIKit.banner(str(cause["title"]), 1700.0))
+ 
+ 	var line := UIKit.label(str(cause["line"]), UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
+ 	line.add_theme_color_override("font_color", UIKit.PINK)
+@@ -74,47 +71,44 @@ func _build_ui() -> void:
+ 	var panel := PanelContainer.new()
+ 	panel.custom_minimum_size = Vector2(1700, 0)
+ 	column.add_child(panel)
+-	var grid := GridContainer.new()
+-	grid.columns = 2
+-	grid.add_theme_constant_override("h_separation", 60)
+-	grid.add_theme_constant_override("v_separation", 10)
+-	panel.add_child(grid)
++	var body := VBoxContainer.new()
++	body.add_theme_constant_override("separation", UIKit.SPACE_M)
++	panel.add_child(body)
+ 
+ 	var modifiers: Array = summary.get("modifiers", [])
+ 	var modifier_ids: Array[String] = []
+ 	for id in modifiers:
+ 		modifier_ids.append(str(id))
+-	_add_row(grid, "Days completed", str(int(summary.get("days_completed", 0))))
+-	_add_row(grid, "Last day's take-home", UIKit.money(float(summary.get("last_take_home", 0.0))))
+-	_add_row(grid, "Last day's running costs", "-" + UIKit.money(float(summary.get("last_overhead", 0.0))))
+-	_add_row(grid, "Final wallet", UIKit.money(float(summary.get("wallet", 0.0))))
+-	_add_row(grid, "Contracts completed", str(int(summary.get("contracts_completed", 0))))
+-	_add_row(grid, "Total earned", UIKit.money(float(summary.get("total_earned", 0.0))))
+-	_add_row(grid, "Damage costs", UIKit.money(float(summary.get("total_damage", 0.0))))
+-	_add_row(grid, "Running costs paid", UIKit.money(float(summary.get("total_overhead", 0.0))))
+-	_add_row(grid, "Best day", UIKit.money(float(summary.get("best_day", 0.0))))
+-	_add_row(grid, "Modifiers", RunModifiers.names(modifier_ids) if not modifier_ids.is_empty() else "None")
+-
+-	var record := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
++
++	# The headline numbers first, then the full breakdown under a rule.
++	var headline := UIKit.stat_grid()
++	body.add_child(headline)
++	UIKit.add_stat(headline, "Days completed", str(int(summary.get("days_completed", 0))), UIKit.GOLD)
++	var wallet := float(summary.get("wallet", 0.0))
++	UIKit.add_stat(headline, "Final wallet", UIKit.money(wallet),
++		UIKit.PINK if wallet < 0.0 else UIKit.GOLD)
++	body.add_child(HSeparator.new())
++
++	var grid := UIKit.stat_grid()
++	body.add_child(grid)
++	UIKit.add_stat(grid, "Last day's take-home", UIKit.money(float(summary.get("last_take_home", 0.0))))
++	UIKit.add_stat(grid, "Last day's running costs", "-" + UIKit.money(float(summary.get("last_overhead", 0.0))), UIKit.PINK)
++	UIKit.add_stat(grid, "Contracts completed", str(int(summary.get("contracts_completed", 0))))
++	UIKit.add_stat(grid, "Total earned", UIKit.money(float(summary.get("total_earned", 0.0))))
++	UIKit.add_stat(grid, "Damage costs", UIKit.money(float(summary.get("total_damage", 0.0))))
++	UIKit.add_stat(grid, "Running costs paid", UIKit.money(float(summary.get("total_overhead", 0.0))))
++	UIKit.add_stat(grid, "Best day", UIKit.money(float(summary.get("best_day", 0.0))))
++	UIKit.add_stat(grid, "Modifiers", RunModifiers.names(modifier_ids) if not modifier_ids.is_empty() else "None")
++
++	var record := UIKit.label("", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER)
+ 	if bool(summary.get("new_best", false)):
+ 		record.text = "NEW PERSONAL BEST: %d days" % int(summary.get("best_run_day", 0))
+ 		record.add_theme_color_override("font_color", UIKit.GOLD)
+ 	else:
+ 		record.text = "Personal best: %d days" % int(summary.get("best_run_day", 0))
++		record.add_theme_color_override("font_color", UIKit.MUTED)
+ 	column.add_child(record)
+ 
+-	var prompt := PanelContainer.new()
+-	prompt.theme_type_variation = &"ButtonPanel"
+-	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+ 	var text := "Press %s to return to the main menu" % UIKit.INTERACT_KEYS if GameFlow.is_authority() \
+ 		else "Waiting for the host to continue"
+-	_prompt = UIKit.label(text, UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
+-	prompt.add_child(_prompt)
+-	column.add_child(prompt)
+-
+-
+-func _add_row(grid: GridContainer, left: String, right: String) -> void:
+-	var l := UIKit.label(left, UIKit.FONT_BODY)
+-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+-	grid.add_child(l)
+-	grid.add_child(UIKit.label(right, UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_RIGHT))
++	_prompt = UIKit.key_prompt(column, text)
+diff --git a/scripts/ui/run_panel.gd b/scripts/ui/run_panel.gd
+index de140aa..e0e8833 100644
+--- a/scripts/ui/run_panel.gd
++++ b/scripts/ui/run_panel.gd
+@@ -57,29 +57,29 @@ func _show_details() -> void:
+ 	assert(state != null, "RunPanel opened for empty slot %d" % _slot)
+ 
+ 	_content.add_child(UIKit.label("SLOT %d" % _slot, UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
+-	var grid := GridContainer.new()
+-	grid.columns = 2
+-	grid.add_theme_constant_override("h_separation", 60)
+-	grid.add_theme_constant_override("v_separation", 10)
++	var grid := UIKit.stat_grid()
+ 	_content.add_child(grid)
+-	_add_row(grid, "Day", str(state.day))
+-	_add_row(grid, "Wallet", UIKit.money(state.wallet))
+-	_add_row(grid, "Contracts completed", str(state.contracts_completed))
+-	_add_row(grid, "Total earned", UIKit.money(state.total_earned))
+-	_add_row(grid, "Damage costs", UIKit.money(state.total_damage))
+-	_add_row(grid, "Running costs", UIKit.money(state.total_overhead))
+-	_add_row(grid, "Best day", UIKit.money(state.best_day))
++	UIKit.add_stat(grid, "Day", str(state.day), UIKit.GOLD)
++	UIKit.add_stat(grid, "Wallet", UIKit.money(state.wallet), UIKit.GOLD)
++	UIKit.add_stat(grid, "Contracts completed", str(state.contracts_completed))
++	UIKit.add_stat(grid, "Total earned", UIKit.money(state.total_earned))
++	UIKit.add_stat(grid, "Damage costs", UIKit.money(state.total_damage),
++		UIKit.PINK if state.total_damage > 0.5 else UIKit.CREAM)
++	UIKit.add_stat(grid, "Running costs", UIKit.money(state.total_overhead))
++	UIKit.add_stat(grid, "Best day", UIKit.money(state.best_day))
+ 	if not state.perks.is_empty():
+-		_add_row(grid, "Perks", ", ".join(state.perks))
+-	_add_row(grid, "Modifiers", RunModifiers.names(state.modifiers) if not state.modifiers.is_empty() else "None yet")
++		UIKit.add_stat(grid, "Perks", ", ".join(state.perks))
++	UIKit.add_stat(grid, "Modifiers", RunModifiers.names(state.modifiers) if not state.modifiers.is_empty() else "None yet")
+ 	var saved := SaveManager.slot_saved_at(_slot)
+ 	if saved > 0:
+-		_add_row(grid, "Last saved", Time.get_datetime_string_from_unix_time(saved, true).substr(0, 16))
++		UIKit.add_stat(grid, "Last saved", Time.get_datetime_string_from_unix_time(saved, true).substr(0, 16))
+ 
+-	var continue_button := _button("Continue", func() -> void: continue_requested.emit(_slot))
++	# Continue is the primary action and starts focused; Delete is kept apart from it.
++	var continue_button := UIKit.button("Continue", func() -> void: continue_requested.emit(_slot), true)
+ 	_content.add_child(continue_button)
+-	_content.add_child(_button("Delete run", _show_confirm))
+-	_content.add_child(_button("Back", close))
++	_content.add_child(UIKit.button("Delete run", _show_confirm))
++	_content.add_child(UIKit.button("Back", close))
++	_content.add_child(UIKit.label("Esc to go back", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
+ 	continue_button.grab_focus.call_deferred()
+ 
+ 
+@@ -91,11 +91,13 @@ func _show_confirm() -> void:
+ 	var warning := UIKit.label("Day %d, %s in the wallet. This cannot be undone." % [state.day, UIKit.money(state.wallet)],
+ 		UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
+ 	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
++	warning.add_theme_color_override("font_color", UIKit.PINK)
+ 	_content.add_child(warning)
+ 
+-	var keep := _button("Keep it", _show_details)
++	# The safe choice is first and focused, so a stray press never deletes a run.
++	var keep := UIKit.button("Keep it", _show_details, true)
+ 	_content.add_child(keep)
+-	_content.add_child(_button("Delete", _delete))
++	_content.add_child(UIKit.button("Delete", _delete))
+ 	keep.grab_focus.call_deferred()
+ 
+ 
+@@ -110,17 +112,3 @@ func _clear() -> void:
+ 	for child in _content.get_children():
+ 		_content.remove_child(child)
+ 		child.queue_free()
+-
+-
+-func _add_row(grid: GridContainer, left: String, right: String) -> void:
+-	var l := UIKit.label(left, UIKit.FONT_BODY)
+-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+-	grid.add_child(l)
+-	grid.add_child(UIKit.label(right, UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_RIGHT))
+-
+-
+-func _button(text: String, on_pressed: Callable) -> Button:
+-	var button := Button.new()
+-	button.text = text
+-	button.pressed.connect(on_pressed)
+-	return button
+diff --git a/scripts/ui/ui_kit.gd b/scripts/ui/ui_kit.gd
+index 2c1309c..d466165 100644
+--- a/scripts/ui/ui_kit.gd
++++ b/scripts/ui/ui_kit.gd
+@@ -32,6 +32,16 @@ const BROWN_DARK := Color("5e2f25")
+ const NOTE_TEXT := Color("7a4034")
+ const GOLD := Color("ffe58a")
+ const PINK := Color("ffb3a3")      # warnings, damage
++const SUCCESS := Color("c4eda6")   # ready, delivered, good news
++const MUTED := Color(CREAM, 0.72)  # secondary text: labels beside a value, hints
++
++## Spacing scale, in UI units. Use these instead of ad hoc numbers so screens share one rhythm.
++const SPACE_S := 14
++const SPACE_M := 22
++const SPACE_L := 32
++
++## Motion. Short and ease-out, so screens settle instead of popping.
++const FADE_TIME := 0.25
+ 
+ const FONT_SMALL := 40
+ const FONT_BODY := 52
+@@ -49,6 +59,7 @@ static func setup(layer: CanvasLayer) -> Control:
+ 	var root := UIRoot.new()
+ 	root.name = "UIRoot"
+ 	layer.add_child(root)
++	fade_in(root)
+ 	return root
+ 
+ 
+@@ -70,7 +81,7 @@ static func modal(layer: CanvasLayer, width: float, dim := true) -> VBoxContaine
+ 	panel.custom_minimum_size = Vector2(width, 0)
+ 	center.add_child(panel)
+ 	var content := VBoxContainer.new()
+-	content.add_theme_constant_override("separation", 22)
++	content.add_theme_constant_override("separation", SPACE_M)
+ 	panel.add_child(content)
+ 	return content
+ 
+@@ -97,6 +108,103 @@ static func chip(text: String, color: Color = PINK) -> PanelContainer:
+ 	return panel
+ 
+ 
++## Fades a screen in so it settles rather than pops. Does nothing outside the tree
++## (a tween cannot run there), so it is always safe to call.
++static func fade_in(node: CanvasItem, duration: float = FADE_TIME) -> void:
++	if not node.is_inside_tree():
++		return
++	node.modulate.a = 0.0
++	var tween := node.create_tween()
++	tween.tween_property(node, "modulate:a", 1.0, duration) \
++		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
++
++
++## The wide wooden title banner every screen opens with.
++static func banner(text: String, width: float = 1300.0) -> PanelContainer:
++	var panel := PanelContainer.new()
++	panel.theme_type_variation = &"BannerPanel"
++	panel.custom_minimum_size = Vector2(width, 0)
++	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
++	panel.add_child(label(text, FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
++	return panel
++
++
++## A button that behaves the same for mouse, keyboard and gamepad: hovering moves focus to
++## it, so there is only ever one highlighted button. `primary` marks the main action (gold
++## text), so the default choice reads at a glance. `min_width` keeps a column of buttons
++## the same width.
++static func button(text: String, on_pressed: Callable, primary: bool = false,
++		min_width: float = 0.0) -> Button:
++	var b := Button.new()
++	b.text = text
++	b.focus_mode = Control.FOCUS_ALL
++	if primary:
++		b.theme_type_variation = &"PrimaryButton"
++	if min_width > 0.0:
++		b.custom_minimum_size.x = min_width
++	b.pressed.connect(on_pressed)
++	b.mouse_entered.connect(func() -> void:
++		if b.is_inside_tree() and not b.disabled:
++			b.grab_focus())
++	return b
++
++
++## A two-column grid for label / value rows (receipts, run stats).
++static func stat_grid() -> GridContainer:
++	var grid := GridContainer.new()
++	grid.columns = 2
++	grid.add_theme_constant_override("h_separation", 60)
++	grid.add_theme_constant_override("v_separation", 12)
++	return grid
++
++
++## Adds one row: a muted label on the left, the value on the right. `value_color` picks out
++## good (SUCCESS, GOLD) and bad (PINK) numbers; the text always says what it is as well, so
++## colour is never the only signal.
++static func add_stat(grid: GridContainer, left: String, right: String,
++		value_color: Color = CREAM, font: Font = null) -> void:
++	var l := label(left, FONT_BODY)
++	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
++	l.add_theme_color_override("font_color", MUTED)
++	var r := label(right, FONT_BODY, HORIZONTAL_ALIGNMENT_RIGHT)
++	r.add_theme_color_override("font_color", value_color)
++	if font != null:
++		l.add_theme_font_override("font", font)
++		r.add_theme_font_override("font", font)
++	grid.add_child(l)
++	grid.add_child(r)
++
++
++## The "Press X to ..." strip at the bottom of a screen. Returns its label so the text can
++## change (a typewriter finishing, a lockout ending).
++static func key_prompt(parent: Control, text: String) -> Label:
++	var panel := PanelContainer.new()
++	panel.theme_type_variation = &"ButtonPanel"
++	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
++	var l := label(text, FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
++	panel.add_child(l)
++	parent.add_child(panel)
++	return l
++
++
++## A thin progress bar in the UI palette. `fill` colours the bar.
++static func progress_bar(fill: Color = GOLD) -> ProgressBar:
++	var bar := ProgressBar.new()
++	bar.show_percentage = false
++	bar.custom_minimum_size = Vector2(0, 22)
++	bar.min_value = 0.0
++	bar.max_value = 1.0
++	set_bar_color(bar, fill)
++	return bar
++
++
++static func set_bar_color(bar: ProgressBar, fill: Color) -> void:
++	var sb := StyleBoxFlat.new()
++	sb.bg_color = fill
++	sb.set_corner_radius_all(10)
++	bar.add_theme_stylebox_override("fill", sb)
++
++
+ static func main_font() -> Font:
+ 	if _main_font == null:
+ 		_main_font = load(MAIN_FONT_PATH)
+@@ -143,6 +251,12 @@ static func theme() -> Theme:
+ 	t.set_color("font_color", "DarkLabel", NOTE_TEXT)
+ 	t.set_constant("outline_size", "DarkLabel", 0)
+ 
++	# Secondary text: key hints, captions. Softer than body text but still outlined to read.
++	t.add_type("MutedLabel")
++	t.set_type_variation("MutedLabel", "Label")
++	t.set_color("font_color", "MutedLabel", MUTED)
++	t.set_constant("outline_size", "MutedLabel", 12)
++
+ 	# Panels
+ 	t.set_stylebox("panel", "PanelContainer",
+ 		_box("Containers/Containers/Container1.png", Vector4(60, 55, 60, 70), Vector4(60, 36, 60, 56)))
+@@ -182,6 +296,25 @@ static func theme() -> Theme:
+ 	t.set_font_size("font_size", "Button", FONT_BODY)
+ 	t.set_constant("line_spacing", "Button", 6)
+ 
++	# The main action on a screen: same button, gold text.
++	t.add_type("PrimaryButton")
++	t.set_type_variation("PrimaryButton", "Button")
++	t.set_color("font_color", "PrimaryButton", GOLD)
++	t.set_color("font_hover_color", "PrimaryButton", BROWN_DARK)
++	t.set_color("font_focus_color", "PrimaryButton", BROWN_DARK)
++
++	# Progress bars (delivery progress): a dark trough with a rounded fill.
++	var trough := StyleBoxFlat.new()
++	trough.bg_color = Color(BROWN_DARK, 0.85)
++	trough.border_color = BROWN
++	trough.set_border_width_all(4)
++	trough.set_corner_radius_all(10)
++	t.set_stylebox("background", "ProgressBar", trough)
++	var fill := StyleBoxFlat.new()
++	fill.bg_color = GOLD
++	fill.set_corner_radius_all(10)
++	t.set_stylebox("fill", "ProgressBar", fill)
++
+ 	# Text fields (the host address box): a cream note with a brown edge.
+ 	var field := StyleBoxFlat.new()
+ 	field.bg_color = CREAM
+diff --git a/scripts/world/walkable_area.gd b/scripts/world/walkable_area.gd
+index dbb6d69..7e154e8 100644
+--- a/scripts/world/walkable_area.gd
++++ b/scripts/world/walkable_area.gd
+@@ -157,12 +157,7 @@ func _build_hud(title: String) -> Label:
+ 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+ 	margin.add_child(column)
+ 
+-	var banner := PanelContainer.new()
+-	banner.theme_type_variation = &"BannerPanel"
+-	banner.custom_minimum_size = Vector2(1300, 0)
+-	banner.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+-	banner.add_child(UIKit.label(title, UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
+-	column.add_child(banner)
++	column.add_child(UIKit.banner(title, 1300.0))
+ 
+ 	var spacer := Control.new()
+ 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+-- 
+2.43.0
+

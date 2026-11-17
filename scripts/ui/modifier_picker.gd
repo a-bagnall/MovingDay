@@ -33,6 +33,7 @@ func open(ids: Array[String]) -> void:
 	var sub := UIKit.label("Every pick makes the run harder, and it stays until the run ends.",
 		UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.add_theme_color_override("font_color", UIKit.PINK)   # a warning: every pick has a cost
 	content.add_child(sub)
 
 	var row := HBoxContainer.new()
@@ -49,6 +50,8 @@ func open(ids: Array[String]) -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.focus_mode = Control.FOCUS_ALL
 		button.pressed.connect(_on_pressed.bind(id))
+		# Hovering moves focus, so mouse and keyboard never highlight two cards at once.
+		button.mouse_entered.connect(button.grab_focus)
 		row.add_child(button)
 		if first == null:
 			first = button
@@ -60,7 +63,7 @@ func open(ids: Array[String]) -> void:
 		stacked.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		content.add_child(stacked)
 	content.add_child(UIKit.label("Left / Right to look, Enter or gamepad A to pick",
-		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
 
 	visible = true
 	InputSetup.ui_captured = true

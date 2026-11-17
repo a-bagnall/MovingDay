@@ -38,6 +38,8 @@ func open() -> void:
 	InputSetup.ui_captured = true
 	_status = ""
 	_refresh()
+	if _address_edit:
+		_address_edit.grab_focus()
 
 
 func close() -> void:
@@ -48,8 +50,8 @@ func close() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# ui_cancel is Esc on the keyboard and B on a gamepad.
-	if visible and event.is_action_pressed("ui_cancel"):
+	var key := event as InputEventKey
+	if visible and key and key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
 		close()
 		get_viewport().set_input_as_handled()
 
@@ -72,39 +74,27 @@ func _refresh() -> void:
 		_build_offline()
 	if not _status.is_empty():
 		var status := UIKit.label(_status, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER)
+		status.add_theme_color_override("font_color", UIKit.PINK)
 		status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_content.add_child(status)
-	if visible:
-		_focus_first_button.call_deferred()
-
-
-## Puts the focus on the first button so a gamepad or keyboard can act at once.
-func _focus_first_button() -> void:
-	for child in _content.get_children():
-		var button := child as Button
-		if button:
-			button.grab_focus()
-			return
 
 
 func _build_offline() -> void:
 	_content.add_child(UIKit.label("Host a game, or join a friend by address",
 		UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
-	_content.add_child(_button("Host game", _on_host_pressed))
+	_content.add_child(UIKit.button("Host game", _on_host_pressed, true))
 
 	_address_edit = LineEdit.new()
 	_address_edit.placeholder_text = "Host address, e.g. 192.168.1.20 or 203.0.113.5:%d" % NetworkManager.DEFAULT_PORT
 	_address_edit.text = _address_text
 	_address_edit.add_theme_font_size_override("font_size", UIKit.FONT_BODY)
+	_address_edit.custom_minimum_size.y = 120
 	_address_edit.text_changed.connect(func(text: String) -> void: _address_text = text)
-	# Gamepad players type with the system on-screen keyboard where there is one (Steam Deck).
-	_address_edit.focus_entered.connect(func() -> void:
-		if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD) and not Input.get_connected_joypads().is_empty():
-			DisplayServer.virtual_keyboard_show(_address_edit.text))
 	_address_edit.text_submitted.connect(func(_text: String) -> void: _on_join_pressed())
 	_content.add_child(_address_edit)
-	_content.add_child(_button("Join game", _on_join_pressed))
-	_content.add_child(_button("Close", close))
+	_content.add_child(UIKit.button("Join game", _on_join_pressed))
+	_content.add_child(UIKit.button("Close", close))
+	_content.add_child(_esc_hint())
 
 
 func _build_session() -> void:
@@ -118,13 +108,15 @@ func _build_session() -> void:
 		for peer_id: int in roster:
 			for player_id: int in roster[peer_id]:
 				owner_of[player_id] = peer_id
+		var roster_grid := UIKit.stat_grid()
+		_content.add_child(roster_grid)
 		for player_id in range(1, InputSetup.MAX_PLAYERS + 1):
 			if not owner_of.has(player_id):
 				continue
 			var peer_id: int = owner_of[player_id]
 			var where := "this computer" if peer_id == multiplayer.get_unique_id() \
 				else ("the host" if peer_id == 1 else "a friend")
-			_content.add_child(UIKit.label("Player %d  -  %s" % [player_id, where], UIKit.FONT_BODY))
+			UIKit.add_stat(roster_grid, "Player %d" % player_id, where)
 		if NetworkManager.player_count() == 0:
 			_content.add_child(UIKit.label("Nobody has joined yet. Hold %s in the room to join." % UIKit.INTERACT_KEYS,
 				UIKit.FONT_SMALL))
@@ -133,8 +125,9 @@ func _build_session() -> void:
 		var help := UIKit.label(_host_help(), UIKit.FONT_SMALL)
 		help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_content.add_child(help)
-	_content.add_child(_button("Close", close))
-	_content.add_child(_button("Disconnect", _on_disconnect_pressed))
+	_content.add_child(UIKit.button("Close", close, true))
+	_content.add_child(UIKit.button("Disconnect", _on_disconnect_pressed))
+	_content.add_child(_esc_hint())
 
 
 ## What the host tells their friends, based on how the router port forwarding went.
@@ -160,11 +153,9 @@ func _host_help() -> String:
 	return same_network
 
 
-func _button(text: String, on_pressed: Callable) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.pressed.connect(on_pressed)
-	return button
+func _esc_hint() -> Label:
+	return UIKit.label("Esc to close", UIKit.FONT_SMALL,
+		HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
 
 
 # --- actions --------------------------------------------------------------
@@ -221,7 +212,7 @@ func _on_join_failed() -> void:
 	_status = "Could not connect to the host"
 	_refresh()
 	if visible and _address_edit:
-		_address_edit.grab_focus.call_deferred()
+		_address_edit.grab_focus()
 
 
 func _on_connection_lost() -> void:

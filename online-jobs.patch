@@ -1,0 +1,1080 @@
+diff --git a/README.md b/README.md
+index 4d4d3ef..f7dac5e 100644
+--- a/README.md
++++ b/README.md
+@@ -20,4 +20,6 @@ Heavy items need two players (one player can lift them, but loses grip easily).
+ 
+ ## Online (LAN or internet)
+ 
+-In the main menu, stand on the blue **Online** pad and press interact to open a small host/join panel (close it with Close or Esc; that does not disconnect). One player hosts, the others join by typing the host's address. Everyone connected appears in the main menu room, and each machine can have several local players: any mix of local and online players works, up to 4 in total. Only the host picks a run. **Jobs are not synchronised between machines yet**, so a run cannot start while other machines are connected.
++In the main menu, stand on the blue **Online** pad and press interact to open a small host/join panel (close it with Close or Esc; that does not disconnect). One player hosts, the others join by typing the host's address. Everyone connected appears in the main menu room, and each machine can have several local players: any mix of local and online players works, up to 4 in total. Only the host picks a run; everyone is then taken to the briefing and through the run together (any player can press continue on the briefing, only the host starts a job from the hub).
++
++In a job the host runs the furniture physics, grip, damage and delivery, and streams the result to the other machines; each machine moves its own players. It is built for a LAN or a low-latency connection: carrying feels best when the round trip is short. Nobody can join while a run is in progress, so connect everyone in the main menu first. A run is saved only on the host.
+diff --git a/scripts/characters/player.gd b/scripts/characters/player.gd
+index 294b6ad..f052d99 100644
+--- a/scripts/characters/player.gd
++++ b/scripts/characters/player.gd
+@@ -55,6 +55,11 @@ var _interact_prev := false
+ var _prev_input_dir := Vector3.ZERO
+ var _stumble_left := 0.0
+ var _pop_tween: Tween
++## Online client: until this tick (msec), ignore the host saying this player holds
++## something. Set when the player lets go, so the host's not-yet-updated state does
++## not make it grab again.
++var net_ignore_holds_until := 0
++
+ var _net_position := Vector3.ZERO   # latest state from the owning machine (remote players)
+ var _net_yaw := 0.0
+ var _has_net_state := false
+@@ -178,12 +183,15 @@ func net_state() -> Array:
+ 
+ 
+ ## Remote players: remember where the owning machine says this player is, and feed
+-## its input so interact presses reach the area's zones.
+-func apply_net_state(position_: Vector3, yaw: float, move: Vector2, interact: bool) -> void:
++## its input so interact presses reach the area's zones. `velocity_` is kept so the
++## furniture this player carries (simulated on the host) can match its speed.
++func apply_net_state(position_: Vector3, yaw: float, move: Vector2, interact: bool,
++		velocity_ := Vector3.ZERO) -> void:
+ 	_net_position = position_
+ 	_net_yaw = yaw
+ 	input.move = move
+ 	input.interact = interact
++	velocity = velocity_
+ 	_has_net_state = true
+ 
+ 
+@@ -212,6 +220,16 @@ func pop() -> void:
+ 
+ ## Called when the player loses their grip on something heavy.
+ func stumble() -> void:
++	if not is_local:
++		# The host simulates the carrying, so it learns of a slip first; the machine
++		# that owns this player has to be told.
++		if NetworkManager.is_host():
++			# Looked up by group and called by name: naming the JobSync class here would
++			# make Player, Furniture and JobSync depend on each other in a loop.
++			var sync := get_tree().get_first_node_in_group("job_sync")
++			if sync:
++				sync.call("notify_stumble", player_id)
++		return
+ 	_stumble_left = stumble_time
+ 
+ 
+@@ -258,14 +276,42 @@ func _push_rigid_bodies() -> void:
+ 			push.y = 0.0
+ 			# Mass-proportional per-frame impulse: players shove light things
+ 			# easily and barely nudge heavy ones.
+-			rb.apply_central_impulse(push * Vector3(velocity.x, 0.0, velocity.z).length() * rb.mass * push_strength)
++			var impulse := push * Vector3(velocity.x, 0.0, velocity.z).length() * rb.mass * push_strength
++			var item := body as Furniture
++			if item != null and item.is_puppet:
++				# On a client the furniture is a copy; the host does the shoving.
++				var sync := get_tree().get_first_node_in_group("job_sync")
++				if sync:
++					sync.call("queue_push", item.net_id, impulse)
++			else:
++				rb.apply_central_impulse(impulse)
+ 
+ 
+ func _interact() -> void:
++	if not GameFlow.is_authority():
++		_request_interact()
++		return
+ 	if held_furniture:
+ 		held_furniture.release(self)
+ 		return
++	var best := _nearest_grabbable()
++	if best:
++		best.request_grab(self)
++
++
++## Online client: the host owns the furniture, so grabbing and dropping are requests.
++func _request_interact() -> void:
++	if held_furniture:
++		NetworkManager.send_interact_request(player_id, -1)
++		held_furniture.release(self)   # let go at once; the host's state catches up
++		net_ignore_holds_until = Time.get_ticks_msec() + 400
++		return
++	var best := _nearest_grabbable()
++	if best:
++		NetworkManager.send_interact_request(player_id, best.net_id)
+ 
++
++func _nearest_grabbable() -> Furniture:
+ 	var best: Furniture = null
+ 	var best_dist := reach
+ 	for node in get_tree().get_nodes_in_group("furniture"):
+@@ -276,5 +322,4 @@ func _interact() -> void:
+ 		if d < best_dist:
+ 			best_dist = d
+ 			best = f
+-	if best:
+-		best.request_grab(self)
++	return best
+diff --git a/scripts/contracts/contract_tracker.gd b/scripts/contracts/contract_tracker.gd
+index 0d08fa8..9b094e3 100644
+--- a/scripts/contracts/contract_tracker.gd
++++ b/scripts/contracts/contract_tracker.gd
+@@ -111,7 +111,8 @@ func _process(delta: float) -> void:
+ 	_damage_value.add_theme_color_override("font_color",
+ 		UIKit.PINK if damage > 0.5 else UIKit.CREAM)
+ 
+-	if delivered >= required.size() and required.size() > 0:
++	# The host decides when the job is over; clients follow it to the briefing.
++	if delivered >= required.size() and required.size() > 0 and GameFlow.is_authority():
+ 		_finish()
+ 
+ 
+diff --git a/scripts/contracts/delivery_zone.gd b/scripts/contracts/delivery_zone.gd
+index c33156e..4a2ac60 100644
+--- a/scripts/contracts/delivery_zone.gd
++++ b/scripts/contracts/delivery_zone.gd
+@@ -31,7 +31,8 @@ func _ready() -> void:
+ 
+ 
+ func _physics_process(delta: float) -> void:
+-	if not active:
++	# Online, the host decides what is delivered; clients are told (see JobSync).
++	if not active or not GameFlow.is_authority():
+ 		return
+ 	var dwell: Dictionary[Furniture, float] = {}
+ 	for body in get_overlapping_bodies():
+diff --git a/scripts/furniture/furniture.gd b/scripts/furniture/furniture.gd
+index 63b2018..a050d60 100644
+--- a/scripts/furniture/furniture.gd
++++ b/scripts/furniture/furniture.gd
+@@ -12,6 +12,15 @@ signal damaged(amount: float, total: float)
+ @export var model_scene: PackedScene
+ @export var model_scale: float = 1.0
+ 
++## Online, on a client: this item is a copy that follows the host's state. It is never
++## simulated here (no physics, grip or damage); set before the item enters the tree.
++var is_puppet := false
++## The same on every machine (the level numbers items in spawn order): how the
++## network refers to this item.
++var net_id := -1
++## The speed multiplier the host gave this item's holders; sent so clients can apply it.
++var net_speed_mult := 1.0
++
+ const GRIP_REACH := 0.65      ## Distance from the furniture end to where a player stands.
+ const MAX_CARRY_ACCEL := 45.0
+ const MAX_STRAIN := 2.2       ## Grip further than this from the holder = auto-drop (e.g. a player pinned by a wall). Must exceed Player.reach (1.8) or far grabs drop instantly.
+@@ -72,6 +81,12 @@ var _prev_vy := 0.0
+ var _pop_tween: Tween
+ var _material: StandardMaterial3D
+ var _base_color := Color(0.7, 0.55, 0.4)
++var _carry_stiffness := 55.0         # read from `data` once, in _ready (see _data_float)
++var _carry_damping := 15.0
++var _net_position := Vector3.ZERO   # puppet: latest state from the host
++var _net_rotation := Quaternion.IDENTITY
++var _net_lin_vel := Vector3.ZERO
++var _has_net_state := false
+ 
+ 
+ func _ready() -> void:
+@@ -81,6 +96,8 @@ func _ready() -> void:
+ 	collision_layer = 1 << 2
+ 	collision_mask = (1 << 0) | (1 << 1) | (1 << 2)
+ 	mass = data.mass
++	_carry_stiffness = _data_float("carry_stiffness", _carry_stiffness)
++	_carry_damping = _data_float("carry_damping", _carry_damping)
+ 	linear_damp = 0.4
+ 	angular_damp = 1.5
+ 	contact_monitor = true
+@@ -97,6 +114,20 @@ func _ready() -> void:
+ 	_build_collision()
+ 	_build_grips()
+ 
++	if is_puppet:
++		# Moved only by the host's state; still solid, so local players cannot walk through.
++		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
++		freeze = true
++		contact_monitor = false
++		max_contacts_reported = 0
++
++
++## A number from `data`, read by name. The carry loop runs every physics frame, so it
++## uses the copies made in _ready instead of looking the members up on FurnitureData there.
++func _data_float(property: String, fallback: float) -> float:
++	var value: Variant = data.get(property)
++	return float(value) if value != null else fallback
++
+ 
+ # --- construction ---------------------------------------------------------
+ 
+@@ -295,7 +326,7 @@ func _pop(strength: float = 1.0) -> void:
+ 
+ ## Detects the moment a falling item stops and answers with a thud: dust and a squash.
+ func _check_landing() -> void:
+-	var vy := linear_velocity.y
++	var vy := _net_lin_vel.y if is_puppet else linear_velocity.y
+ 	if not in_truck and not is_delivered and _prev_vy < -LAND_SPEED and vy > -0.5:
+ 		var strength := clampf(-_prev_vy / DUST_FULL_SPEED, 0.3, 1.5)
+ 		_spawn_dust(strength)
+@@ -367,11 +398,17 @@ func _show_damage_popup(amount: float) -> void:
+ # --- carrying physics -----------------------------------------------------
+ 
+ func _physics_process(delta: float) -> void:
++	if is_puppet:
++		_puppet_step(delta)
++		return
+ 	_damage_cooldown = maxf(_damage_cooldown - delta, 0.0)
+ 	debug_peak_age += delta
+ 	_update_flash(delta)
+ 	_check_landing()
+ 
++	for i in _holders.keys():
++		if not is_instance_valid(_holders[i]):
++			_holders.erase(i)   # a player left mid-carry
+ 	if _holders.is_empty():
+ 		return
+ 
+@@ -392,8 +429,8 @@ func _physics_process(delta: float) -> void:
+ 		# Damp toward the holder's velocity, not toward standing still: otherwise the
+ 		# item trails a metre behind at running speed, which fought the grip lock
+ 		# and drained the grip while simply walking.
+-		var accel := data.carry_stiffness * (target - grip_world) \
+-			+ data.carry_damping * (player.velocity - point_velocity)
++		var accel := _carry_stiffness * (target - grip_world) \
++			+ _carry_damping * (player.velocity - point_velocity)
+ 		accel = accel.limit_length(MAX_CARRY_ACCEL)
+ 		apply_force(accel * mass / float(holder_count), r)
+ 
+@@ -476,6 +513,7 @@ func _update_player_speed(lift: float, strain: float) -> void:
+ 	if lift < 1.0:
+ 		mult = minf(mult, 0.3)   # not enough people: drag, don't lift
+ 	mult *= clampf(1.0 - maxf(strain - 0.8, 0.0) / 2.5, 0.25, 1.0)
++	net_speed_mult = mult
+ 	for player in _holders.values():
+ 		(player as Player).speed_multiplier = mult
+ 
+@@ -508,10 +546,108 @@ func _on_dissolved() -> void:
+ 	process_mode = Node.PROCESS_MODE_DISABLED
+ 
+ 
++# --- online ---------------------------------------------------------------
++
++## Host: this item's state for the clients:
++## [id, position, rotation, linear velocity, angular velocity, holders, speed multiplier,
++## grip percent, total damage, delivered]. `holders` is [[grip index, player id], ...].
++func net_state() -> Array:
++	var holders: Array = []
++	for i in _holders:
++		var holder: Variant = _holders[i]
++		if is_instance_valid(holder):
++			holders.append([i, (holder as Player).player_id])
++	return [net_id, global_position, global_transform.basis.get_rotation_quaternion(),
++		linear_velocity, angular_velocity, holders, net_speed_mult, grip_percent(),
++		total_damage, is_delivered]
++
++
++## Client: takes the host's state. `players` maps player id -> Player on this machine.
++func net_apply_state(state: Array, players: Dictionary) -> void:
++	if state.size() < 10 or is_delivered:
++		return
++	_net_position = state[1]
++	_net_rotation = state[2]
++	_net_lin_vel = state[3]
++	if not _has_net_state:
++		global_transform = Transform3D(Basis(_net_rotation), _net_position)   # first state: snap
++		_has_net_state = true
++
++	var holders := {}
++	for entry in state[5]:
++		var holder := players.get(entry[1]) as Player
++		if holder != null:
++			holders[int(entry[0])] = holder
++	net_speed_mult = float(state[6])
++	_net_set_holders(holders)
++	_grip_strength = float(state[7]) / 100.0
++	_net_take_damage(float(state[8]))
++	if state[9]:
++		deliver()
++
++
++## Makes the holders match the host's. Only bookkeeping: the host does the physics.
++func _net_set_holders(holders: Dictionary) -> void:
++	for i in _holders.keys():
++		var old: Variant = _holders[i]
++		var valid := is_instance_valid(old)
++		if valid and holders.get(i) == old:
++			continue
++		_holders.erase(i)
++		if valid and (old as Player).held_furniture == self:
++			var player := old as Player
++			player.held_furniture = null
++			player.speed_multiplier = 1.0
++			remove_collision_exception_with(player)
++			player.remove_collision_exception_with(self)
++	for i in holders:
++		if _holders.has(i):
++			continue
++		var holder: Player = holders[i]
++		if holder.is_local and Time.get_ticks_msec() < holder.net_ignore_holds_until:
++			continue   # just let go; the host has not caught up yet
++		_holders[i] = holder
++		holder.held_furniture = self
++		add_collision_exception_with(holder)
++		holder.add_collision_exception_with(self)
++		if holder.is_local:
++			holder.pop()
++			_pop(0.8)
++	for holder: Player in _holders.values():
++		holder.speed_multiplier = net_speed_mult
++
++
++## Shows damage the host reported, the way a local knock would.
++func _net_take_damage(total: float) -> void:
++	if total > total_damage + 0.01:
++		var amount := total - total_damage
++		_flash = 1.0
++		_shake = 1.0
++		_show_damage_popup(amount)
++		damaged.emit(amount, total)
++	total_damage = total
++
++
++## Puppet: glide toward the last state the host sent.
++func _puppet_step(delta: float) -> void:
++	_update_flash(delta)
++	_check_landing()
++	if not _has_net_state or is_delivered:
++		return
++	var xform := global_transform
++	if xform.origin.distance_to(_net_position) > 3.0:
++		xform = Transform3D(Basis(_net_rotation), _net_position)   # far behind: snap
++	else:
++		var weight := 1.0 - exp(-20.0 * delta)
++		var rotation_ := xform.basis.get_rotation_quaternion().slerp(_net_rotation, weight)
++		xform = Transform3D(Basis(rotation_), xform.origin.lerp(_net_position, weight))
++	global_transform = xform
++
++
+ # --- damage ---------------------------------------------------------------
+ 
+ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+-	if in_truck or data == null:
++	if is_puppet or in_truck or data == null:
+ 		return
+ 	# dv = impulse / own mass, so a light item hit by a heavy one takes a big dv
+ 	# (the TV suffers, the sofa barely notices) without extra rules.
+diff --git a/scripts/levels/test_house.gd b/scripts/levels/test_house.gd
+index 21ab182..e12466c 100644
+--- a/scripts/levels/test_house.gd
++++ b/scripts/levels/test_house.gd
+@@ -58,6 +58,8 @@ const STAIR_COLOR := Color(0.6, 0.5, 0.4)
+ 
+ ## Stair approaches that furniture must not be placed in.
+ var _keep_clear: Array[AABB] = []
++## Numbers furniture in spawn order, so every machine agrees what "item 3" is.
++var _next_net_id := 0
+ 
+ 
+ func _ready() -> void:
+@@ -70,9 +72,16 @@ func _ready() -> void:
+ 	var items := _spawn_furniture()
+ 
+ 	for player_id in InputSetup.local_player_ids():
+-		_spawn_player(player_id)
++		_spawn_player(player_id, true)
++	for player_id in NetworkManager.remote_player_ids():
++		_spawn_player(player_id, false)
+ 	SaveManager.begin_day()
+-	_start_job(zone, items)
++	_start_job(zone, items)   # trims `items` to the job's furniture before it first waits
++	if NetworkManager.is_online():
++		var sync := JobSync.new()
++		sync.name = "JobSync"
++		add_child(sync)
++		sync.setup(items, zone)
+ 
+ 
+ func _start_job(zone: DeliveryZone, items: Array[Furniture]) -> void:
+@@ -271,9 +280,10 @@ func _build_truck() -> DeliveryZone:
+ 
+ # --- actors ---------------------------------------------------------------
+ 
+-func _spawn_player(player_id: int) -> void:
++func _spawn_player(player_id: int, local: bool) -> void:
+ 	var p := Player.new()
+ 	p.player_id = player_id
++	p.is_local = local
+ 	if PLAYER_MODELS.has(player_id):
+ 		p.model_scene = load(PLAYER_MODELS[player_id])
+ 	p.position = PLAYER_SPAWNS[player_id - 1]
+@@ -316,6 +326,9 @@ func _make(key: String, label: String, size: Vector3, mass: float, fragility: fl
+ 	var f := Furniture.new()
+ 	f.data = d
+ 	f.damage_enabled = false
++	f.net_id = _next_net_id
++	_next_net_id += 1
++	f.is_puppet = NetworkManager.mode == NetworkManager.Mode.CLIENT   # the host simulates
+ 	if FURNITURE_MODELS.has(key):
+ 		f.model_scene = load(FURNITURE_MODELS[key])
+ 		f.model_scale = FURNITURE_MODEL_SCALE
+diff --git a/scripts/network/job_sync.gd b/scripts/network/job_sync.gd
+new file mode 100644
+index 0000000..e6a4452
+--- /dev/null
++++ b/scripts/network/job_sync.gd
+@@ -0,0 +1,212 @@
++extends Node
++class_name JobSync
++## Online play inside a job. The host runs everything that matters (furniture physics,
++## grabbing, grip, damage, delivery, the contract) exactly as offline. Each client runs
++## only its own players and shows the rest as the host reports it:
++##
++##   host   -> clients   furniture state, ~30 times a second (position, who holds it, damage)
++##   client -> host      "grab / drop this" requests, and shoves (so light things still move)
++##   everyone <-> all    each machine's own player positions, like the hub and main menu
++##
++## Added to the job scene by the level when a session is running. Items are named by
++## Furniture.net_id, which is the same on every machine because the level spawns them in
++## the same order.
++
++const SEND_INTERVAL := 1.0 / 30.0
++## A client could send any shove it likes; cap it per kg of the item (a real shove at full
++## speed is Player.max_speed * Player.push_strength, about 0.25).
++const MAX_PUSH_PER_KG := 0.8
++## The host sees a remote player where it was a moment ago, so a grab is judged with
++## this much extra reach.
++const REACH_TOLERANCE := 1.6
++
++var _items: Dictionary = {}          # furniture net id -> Furniture
++var _zone: DeliveryZone
++var _net_timer := 0.0
++var _seq := 0                        # host: counts snapshots
++var _last_seq := -1                  # client: newest snapshot applied
++var _push_accum: Dictionary = {}     # client: furniture net id -> impulse not yet sent
++
++
++## Call once the job's furniture list is final.
++func setup(items: Array[Furniture], zone: DeliveryZone) -> void:
++	_zone = zone
++	for item in items:
++		_items[item.net_id] = item
++
++
++func _ready() -> void:
++	add_to_group("job_sync")
++	NetworkManager.roster_changed.connect(_drop_departed_players)
++	NetworkManager.player_states_received.connect(_on_player_states_received)
++	if NetworkManager.is_host():
++		NetworkManager.interact_requested.connect(_on_interact_requested)
++		NetworkManager.pushes_received.connect(_on_pushes_received)
++	else:
++		NetworkManager.job_state_received.connect(_on_job_state_received)
++		NetworkManager.stumble_received.connect(_on_stumble_received)
++		GameFlow.report_scene_ready()   # the host starts sending once it knows we are here
++
++
++func _physics_process(delta: float) -> void:
++	if not NetworkManager.is_online():
++		return
++	_net_timer += delta
++	if _net_timer < SEND_INTERVAL:
++		return
++	_net_timer = 0.0
++	_stream_local_players()
++	if NetworkManager.is_host():
++		_send_furniture_state()
++	else:
++		_flush_pushes()
++
++
++# --- players --------------------------------------------------------------
++
++func _stream_local_players() -> void:
++	var states: Array = []
++	for player: Player in get_tree().get_nodes_in_group("players"):
++		if player.is_local:
++			states.append(player.net_state())
++	if not states.is_empty():
++		NetworkManager.send_player_states(states)
++
++
++func _on_player_states_received(peer_id: int, states: Array) -> void:
++	var allowed: Array = NetworkManager.roster().get(peer_id, [])
++	for state in states:
++		if not (state is Array) or (state as Array).size() < 6:
++			continue
++		var player := _find_player(state[0])
++		# Only accept states for players that peer actually owns.
++		if player == null or player.is_local or not allowed.has(player.player_id):
++			continue
++		player.apply_net_state(state[1], state[3], state[4], state[5], state[2])
++
++
++func _find_player(player_id: int) -> Player:
++	for player: Player in get_tree().get_nodes_in_group("players"):
++		if player.player_id == player_id:
++			return player
++	return null
++
++
++func _players_by_id() -> Dictionary:
++	var out := {}
++	for player: Player in get_tree().get_nodes_in_group("players"):
++		out[player.player_id] = player
++	return out
++
++
++## A machine left: its players go, and whatever they carried is dropped.
++func _drop_departed_players() -> void:
++	var wanted := NetworkManager.remote_player_ids()
++	for player: Player in get_tree().get_nodes_in_group("players"):
++		if player.is_local or wanted.has(player.player_id):
++			continue
++		if player.held_furniture:
++			player.held_furniture.release(player)
++		player.remove_from_group("players")   # queue_free is deferred; leave the roster now
++		player.queue_free()
++
++
++## Host: tell the machine that owns `player_id` that it lost its grip.
++func notify_stumble(player_id: int) -> void:
++	var roster := NetworkManager.roster()
++	for peer_id: int in roster:
++		if peer_id != 1 and (roster[peer_id] as Array).has(player_id):
++			NetworkManager.send_stumble(peer_id, player_id)
++
++
++func _on_stumble_received(player_id: int) -> void:
++	var player := _find_player(player_id)
++	if player != null and player.is_local:
++		player.stumble()
++
++
++# --- host: furniture ------------------------------------------------------
++
++func _send_furniture_state() -> void:
++	var peers: Array[int] = []
++	for peer_id: int in NetworkManager.roster():
++		if peer_id != 1 and GameFlow.is_peer_ready(peer_id):
++			peers.append(peer_id)
++	if peers.is_empty():
++		return
++	var states: Array = []
++	for id: int in _items:
++		var item: Furniture = _items[id]
++		if is_instance_valid(item):
++			states.append(item.net_state())
++	var payload := [GameFlow.scene_serial, _seq, states]
++	_seq += 1
++	for peer_id in peers:
++		NetworkManager.send_job_state(peer_id, payload)
++
++
++## A client's player wants to grab (furniture_id >= 0) or drop (-1). The host re-checks
++## everything: the client only suggests.
++func _on_interact_requested(peer_id: int, player_id: int, furniture_id: int) -> void:
++	if not (NetworkManager.roster().get(peer_id, []) as Array).has(player_id):
++		return
++	var player := _find_player(player_id)
++	if player == null or player.is_local:
++		return
++	if player.held_furniture:
++		player.held_furniture.release(player)
++		return
++	var item: Furniture = _items.get(furniture_id)
++	if item == null or not is_instance_valid(item) or not item.can_be_grabbed_by(player):
++		return
++	if item.distance_to_nearest_free_grip(player.global_position) > player.reach * REACH_TOLERANCE:
++		return
++	item.request_grab(player)
++
++
++func _on_pushes_received(_peer_id: int, pushes: Array) -> void:
++	for entry in pushes:
++		if not (entry is Array) or (entry as Array).size() < 2 or not (entry[1] is Vector3):
++			continue
++		var item: Furniture = _items.get(int(entry[0]))
++		if item == null or not is_instance_valid(item) or item.is_held() or item.is_delivered:
++			continue
++		var impulse: Vector3 = entry[1]
++		item.apply_central_impulse(impulse.limit_length(item.mass * MAX_PUSH_PER_KG))
++
++
++# --- client: furniture ----------------------------------------------------
++
++func _on_job_state_received(payload: Array) -> void:
++	if payload.size() < 3 or int(payload[0]) != GameFlow.scene_serial:
++		return   # from a scene we have left
++	var seq := int(payload[1])
++	if seq <= _last_seq:
++		return   # older than what we have
++	_last_seq = seq
++	var players := _players_by_id()
++	for state in payload[2]:
++		if not (state is Array) or (state as Array).is_empty():
++			continue
++		var item: Furniture = _items.get(int(state[0]))
++		if item == null or not is_instance_valid(item):
++			continue
++		item.net_apply_state(state, players)
++		if item.is_delivered and _zone != null and not _zone.delivered_items.has(item):
++			_zone.delivered_items.append(item)
++			_zone.delivery_changed.emit(_zone.delivered_items.size())
++
++
++## Called by a local player that is shoving a furniture copy; sent with the next tick.
++func queue_push(furniture_id: int, impulse: Vector3) -> void:
++	_push_accum[furniture_id] = _push_accum.get(furniture_id, Vector3.ZERO) + impulse
++
++
++func _flush_pushes() -> void:
++	if _push_accum.is_empty():
++		return
++	var pushes: Array = []
++	for id in _push_accum:
++		pushes.append([id, _push_accum[id]])
++	_push_accum.clear()
++	NetworkManager.send_pushes(pushes)
+diff --git a/scripts/network/network_manager.gd b/scripts/network/network_manager.gd
+index e797f87..18e8b18 100644
+--- a/scripts/network/network_manager.gd
++++ b/scripts/network/network_manager.gd
+@@ -12,8 +12,12 @@ extends Node
+ ## status says so.
+ ##
+ ## Also streams each machine's player positions and button state to the others so
+-## walkable areas (main menu, hub) can show everyone. Synchronised jobs (furniture,
+-## damage, contracts) build on this in a later step.
++## walkable areas (main menu, hub) and jobs can show everyone.
++##
++## Jobs are host-authoritative: the host simulates the furniture and streams its state
++## to the clients (see JobSync); clients send back grab/drop requests and shoves. This
++## script only carries those messages. Everything is an RPC on this autoload, so a
++## message that arrives while a scene is still loading is simply dropped, never an error.
+ 
+ signal roster_changed
+ ## Client only: connected to the host (the roster follows).
+@@ -26,6 +30,14 @@ signal connection_lost
+ signal port_status_changed
+ ## Another machine's player states arrived: [id, position, velocity, facing, move, interact] each.
+ signal player_states_received(peer_id: int, states: Array)
++## Host only: a client asked to grab (furniture_id >= 0) or drop (-1) with one of its players.
++signal interact_requested(peer_id: int, player_id: int, furniture_id: int)
++## Host only: a client shoved furniture. `pushes` is [[furniture id, impulse], ...].
++signal pushes_received(peer_id: int, pushes: Array)
++## Client only: the host's snapshot of the job: [scene serial, sequence number, furniture states].
++signal job_state_received(payload: Array)
++## Client only: the host says one of this machine's players lost its grip.
++signal stumble_received(player_id: int)
+ 
+ const DEFAULT_PORT := 7777
+ 
+@@ -135,6 +147,44 @@ func send_player_states(states: Array) -> void:
+ 		_receive_player_states.rpc(states)
+ 
+ 
++## Host: sends the job's furniture state to one client. Unreliable on purpose: the
++## next snapshot supersedes a lost one.
++func send_job_state(peer_id: int, payload: Array) -> void:
++	if mode == Mode.HOST and _is_connected():
++		_receive_job_state.rpc_id(peer_id, payload)
++
++
++## Client: asks the host to grab furniture `furniture_id` (or drop what is held, with -1)
++## for the local player `player_id`.
++func send_interact_request(player_id: int, furniture_id: int) -> void:
++	if mode == Mode.CLIENT and _is_connected():
++		_request_interact.rpc_id(1, player_id, furniture_id)
++
++
++## Client: tells the host about shoves: [[furniture id, impulse], ...].
++func send_pushes(pushes: Array) -> void:
++	if mode == Mode.CLIENT and _is_connected():
++		_receive_pushes.rpc_id(1, pushes)
++
++
++## Host: tells the client that owns `player_id` that it lost its grip.
++func send_stumble(peer_id: int, player_id: int) -> void:
++	if mode == Mode.HOST and _is_connected():
++		_receive_stumble.rpc_id(peer_id, player_id)
++
++
++## Whether messages can be sent right now (online and the connection is up).
++func can_send() -> bool:
++	return mode != Mode.OFFLINE and _is_connected()
++
++
++## Host: whether new machines may join. A run in progress cannot take newcomers,
++## so GameFlow turns this off outside the main menu.
++func set_accepting_connections(accepting: bool) -> void:
++	if mode == Mode.HOST and multiplayer.multiplayer_peer != null:
++		multiplayer.multiplayer_peer.refuse_new_connections = not accepting
++
++
+ func _is_connected() -> bool:
+ 	return multiplayer.multiplayer_peer != null \
+ 		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+@@ -334,6 +384,28 @@ func _receive_player_states(states: Array) -> void:
+ 	player_states_received.emit(multiplayer.get_remote_sender_id(), states)
+ 
+ 
++@rpc("authority", "call_remote", "unreliable")
++func _receive_job_state(payload: Array) -> void:
++	job_state_received.emit(payload)
++
++
++@rpc("any_peer", "call_remote", "reliable")
++func _request_interact(player_id: int, furniture_id: int) -> void:
++	if mode == Mode.HOST:
++		interact_requested.emit(multiplayer.get_remote_sender_id(), player_id, furniture_id)
++
++
++@rpc("any_peer", "call_remote", "unreliable")
++func _receive_pushes(pushes: Array) -> void:
++	if mode == Mode.HOST:
++		pushes_received.emit(multiplayer.get_remote_sender_id(), pushes)
++
++
++@rpc("authority", "call_remote", "reliable")
++func _receive_stumble(player_id: int) -> void:
++	stumble_received.emit(player_id)
++
++
+ # --- connection events (client side) ----------------------------------------
+ 
+ func _on_connected_to_server() -> void:
+diff --git a/scripts/progression/game_flow.gd b/scripts/progression/game_flow.gd
+index 89e9a7c..8a56698 100644
+--- a/scripts/progression/game_flow.gd
++++ b/scripts/progression/game_flow.gd
+@@ -1,6 +1,11 @@
+ extends Node
+ ## Autoload "GameFlow". Owns the in-memory day loop and scene transitions.
+ ## A day contains multiple contracts; saves are written only at day boundaries.
++##
++## Online, only the host runs the loop. Every scene change it makes is sent to the
++## clients together with a snapshot of the run and the day (so their briefing, hub and
++## job screens show the same thing), and the clients change scene with it. Clients that
++## want something to happen (continue past the briefing) ask the host.
+ 
+ const DAY_LENGTH := 10.0
+ const HUB_EVERY_N_DAYS := 3
+@@ -10,6 +15,8 @@ const HUB_SCENE := "res://scenes/levels/hub.tscn"
+ const JOB_SCENE := "res://scenes/levels/test_house.tscn"
+ const BRIEFING_SCENE := "res://scenes/ui/briefing.tscn"
+ 
++const _SCENES := [MAIN_MENU_SCENE, HUB_SCENE, JOB_SCENE, BRIEFING_SCENE]
++
+ var day_time_remaining := DAY_LENGTH
+ var day_clock_running := false
+ var day_contract_count := 0
+@@ -17,12 +24,27 @@ var day_total: Dictionary = {}
+ var previous_contract_result: Dictionary = {}
+ var current_contract: Contract
+ 
++## Counts scene changes. Messages about a scene carry it, so a late one from the
++## previous scene is recognised and ignored.
++var scene_serial := 0
++
++var _peer_serial: Dictionary = {}   # host: peer id -> last scene serial that peer reported loaded
++
++
++func _ready() -> void:
++	NetworkManager.connection_lost.connect(_on_connection_lost)
++
+ 
+ func _process(delta: float) -> void:
+ 	if day_clock_running:
+ 		day_time_remaining = maxf(0.0, day_time_remaining - delta)
+ 
+ 
++## True when this machine decides what happens next: offline, or the host.
++func is_authority() -> bool:
++	return not NetworkManager.is_online() or NetworkManager.is_host()
++
++
+ ## True if the hub comes before `day` (never before day 1).
+ func is_hub_day(day: int) -> bool:
+ 	return day > 1 and (day - 1) % HUB_EVERY_N_DAYS == 0
+@@ -71,6 +93,17 @@ func finish_contract(result: Dictionary) -> void:
+ 	_go(BRIEFING_SCENE)
+ 
+ 
++## Called by the briefing when a player presses continue. A client asks the host.
++func continue_from_briefing() -> void:
++	if is_authority():
++		if current_contract != null:
++			launch_next_contract()
++		else:
++			finish_day()
++	elif NetworkManager.can_send():
++		_request_continue.rpc_id(1, scene_serial)
++
++
+ ## Called by the end-of-day briefing after the team dismisses the day summary.
+ func finish_day() -> void:
+ 	assert(SaveManager.run != null, "finish_day called with no active run")
+@@ -132,5 +165,124 @@ func _accumulate_day_result(result: Dictionary) -> void:
+ 
+ 
+ func _go(path: String) -> void:
++	scene_serial += 1
++	# A run in progress cannot take newcomers; the main menu can.
++	NetworkManager.set_accepting_connections(path == MAIN_MENU_SCENE)
++	if NetworkManager.is_host() and NetworkManager.peer_count() > 1:
++		_net_go.rpc(path, scene_serial, _snapshot())
++	_change_scene(path)
++
++
++func _change_scene(path: String) -> void:
+ 	var err := get_tree().change_scene_to_file(path)
+ 	assert(err == OK, "Could not load %s: %s" % [path, error_string(err)])
++
++
++# --- online ---------------------------------------------------------------
++
++## Host: sends the run (wallet, boosts) to the clients again, e.g. after a hub purchase.
++func sync_run() -> void:
++	if NetworkManager.is_host() and NetworkManager.peer_count() > 1 and SaveManager.run != null:
++		_net_run.rpc(SaveManager.run.to_dict())
++
++
++## Client: call once the new scene is loaded, so the host starts sending it state.
++func report_scene_ready() -> void:
++	if NetworkManager.mode == NetworkManager.Mode.CLIENT and NetworkManager.can_send():
++		_client_scene_ready.rpc_id(1, scene_serial)
++
++
++## Host: whether `peer_id` has loaded the scene that is current now.
++func is_peer_ready(peer_id: int) -> bool:
++	return _peer_serial.get(peer_id, -1) == scene_serial
++
++
++func _snapshot() -> Dictionary:
++	return {
++		"run": SaveManager.run.to_dict() if SaveManager.run != null else {},
++		"day_time_remaining": day_time_remaining,
++		"day_clock_running": day_clock_running,
++		"day_contract_count": day_contract_count,
++		"day_total": day_total.duplicate(true),
++		"previous": previous_contract_result.duplicate(true),
++		"contract": _contract_to_dict(current_contract),
++	}
++
++
++func _apply_snapshot(snapshot: Dictionary) -> void:
++	var run_data: Dictionary = snapshot.get("run", {})
++	if run_data.is_empty():
++		SaveManager.clear_mirror()
++	else:
++		SaveManager.mirror_run(run_data)
++	day_time_remaining = float(snapshot.get("day_time_remaining", DAY_LENGTH))
++	day_clock_running = bool(snapshot.get("day_clock_running", false))
++	day_contract_count = int(snapshot.get("day_contract_count", 0))
++	day_total = snapshot.get("day_total", {})
++	previous_contract_result = snapshot.get("previous", {})
++	current_contract = _contract_from_dict(snapshot.get("contract", {}))
++
++
++static func _contract_to_dict(contract: Contract) -> Dictionary:
++	if contract == null:
++		return {}
++	return {
++		"contract_number": contract.contract_number,
++		"client_name": contract.client_name,
++		"letter_text": contract.letter_text,
++		"payout": contract.payout,
++	}
++
++
++static func _contract_from_dict(data: Dictionary) -> Contract:
++	if data.is_empty():
++		return null
++	var contract := Contract.new()
++	contract.contract_number = int(data.get("contract_number", 1))
++	contract.client_name = str(data.get("client_name", ""))
++	contract.letter_text = str(data.get("letter_text", ""))
++	contract.payout = float(data.get("payout", 0.0))
++	return contract
++
++
++## Host -> clients: change scene, and bring the run and the day along.
++@rpc("authority", "call_remote", "reliable")
++func _net_go(path: String, serial: int, snapshot: Dictionary) -> void:
++	if not _SCENES.has(path):
++		return
++	scene_serial = serial
++	_apply_snapshot(snapshot)
++	_change_scene(path)
++
++
++## Host -> clients: the run changed without a scene change.
++@rpc("authority", "call_remote", "reliable")
++func _net_run(data: Dictionary) -> void:
++	SaveManager.mirror_run(data)
++
++
++## Client -> host: "I have loaded scene `serial`".
++@rpc("any_peer", "call_remote", "reliable")
++func _client_scene_ready(serial: int) -> void:
++	if NetworkManager.is_host():
++		_peer_serial[multiplayer.get_remote_sender_id()] = serial
++
++
++## Client -> host: "someone here pressed continue on the briefing".
++@rpc("any_peer", "call_remote", "reliable")
++func _request_continue(serial: int) -> void:
++	# Compared by scene path, not by the Briefing class: Briefing already depends on GameFlow.
++	var scene := get_tree().current_scene
++	if NetworkManager.is_host() and serial == scene_serial and scene != null \
++			and scene.scene_file_path == BRIEFING_SCENE:
++		continue_from_briefing()
++
++
++## The host went away: drop its run and go back to the main menu.
++func _on_connection_lost() -> void:
++	SaveManager.clear_mirror()
++	_reset_day_state()
++	_peer_serial.clear()
++	var scene := get_tree().current_scene
++	if scene == null or scene.scene_file_path != MAIN_MENU_SCENE:
++		_change_scene(MAIN_MENU_SCENE)
+diff --git a/scripts/progression/save_manager.gd b/scripts/progression/save_manager.gd
+index 73d8dcf..fa5ae24 100644
+--- a/scripts/progression/save_manager.gd
++++ b/scripts/progression/save_manager.gd
+@@ -7,6 +7,9 @@ const PROFILE_PATH := "user://profile.json"
+ 
+ var profile: ProfileState
+ var run: RunState
++## True on a client playing in the host's run: `run` is a copy the host sent, and
++## nothing is ever written to disk from it.
++var is_mirror := false
+ var _day_open := false
+ 
+ 
+@@ -39,6 +42,23 @@ func continue_run(slot: int) -> void:
+ 	_day_open = false
+ 
+ 
++## Client: replaces the run with the host's copy. Never saved.
++func mirror_run(data: Dictionary) -> void:
++	var state := RunState.from_dict(data)
++	assert(state != null, "mirror_run: the host sent an invalid run")
++	is_mirror = true
++	run = state
++	_day_open = true   # begin_day() then has nothing to do
++
++
++## Client: forgets the host's run (the host ended it, or the connection went).
++func clear_mirror() -> void:
++	if is_mirror:
++		is_mirror = false
++		run = null
++		_day_open = false
++
++
+ ## Starts a fresh run in memory. Nothing is written until the first day begins.
+ func new_run(slot: int) -> void:
+ 	_slot_path(slot)
+@@ -101,10 +121,14 @@ func _read_profile() -> ProfileState:
+ 
+ 
+ func _write_run() -> void:
++	if is_mirror:
++		return
+ 	_write_json(_slot_path(run.slot), run.to_dict())
+ 
+ 
+ func _write_profile() -> void:
++	if is_mirror:
++		return
+ 	_write_json(PROFILE_PATH, profile.to_dict())
+ 
+ 
+diff --git a/scripts/ui/briefing.gd b/scripts/ui/briefing.gd
+index 3d3e627..9ff6d6f 100644
+--- a/scripts/ui/briefing.gd
++++ b/scripts/ui/briefing.gd
+@@ -173,8 +173,7 @@ func _continue_prompt() -> String:
+ 
+ 
+ func _continue() -> void:
+-	set_process(false)
+-	if GameFlow.current_contract != null:
+-		GameFlow.launch_next_contract()
+-	else:
+-		GameFlow.finish_day()
++	# A client keeps running: the host may not have answered yet, so it can press again.
++	if GameFlow.is_authority():
++		set_process(false)
++	GameFlow.continue_from_briefing()
+diff --git a/scripts/world/hub.gd b/scripts/world/hub.gd
+index 8ebb68a..cc2e212 100644
+--- a/scripts/world/hub.gd
++++ b/scripts/world/hub.gd
+@@ -62,9 +62,11 @@ func _process(delta: float) -> void:
+ 			_countdown = COUNTDOWN_TIME
+ 		_countdown -= delta
+ 		if _countdown <= 0.0:
+-			GameFlow.start_job()
+-			set_process(false)
+-			return
++			if GameFlow.is_authority():
++				GameFlow.start_job()
++				set_process(false)
++				return
++			_countdown = 0.0   # a client waits for the host to start the job
+ 	else:
+ 		_countdown = -1.0
+ 
+@@ -107,6 +109,7 @@ func _on_shop_interacted(_player_id: int, item_id: String) -> void:
+ 
+ 	SaveManager.run.wallet -= price
+ 	_set_notice("Bought %s for %s" % [item.name, UIKit.money(price)])
++	GameFlow.sync_run()   # other machines show the new wallet
+ 
+ 
+ func _set_notice(message: String) -> void:
+diff --git a/scripts/world/main_menu.gd b/scripts/world/main_menu.gd
+index 7ac0560..1107a7a 100644
+--- a/scripts/world/main_menu.gd
++++ b/scripts/world/main_menu.gd
+@@ -7,8 +7,8 @@ class_name MainMenu
+ ## continues the saved one. The Online pad opens a small host/join panel over the
+ ## room; closing it leaves the connection (and everyone in the room) as it is.
+ ##
+-## Jobs are not synchronised between machines yet, so a run cannot start while other
+-## machines are connected. Flip ONLINE_JOBS_READY once they are.
++## Online, only the host picks the run. GameFlow then takes every machine to the
++## briefing together; no one else can join until the run is over (see GameFlow._go).
+ 
+ const HOLD_TIME := 0.8
+ const SLOT_SPACING := 5.0
+@@ -17,7 +17,6 @@ const PAD_SIZE := Vector3(3.0, 0.1, 3.0)
+ const SLOT_COLOR := Color(0.95, 0.75, 0.3)
+ const PLACEHOLDER_COLOR := Color(0.6, 0.6, 0.65)
+ const ONLINE_COLOR := Color(0.4, 0.7, 0.9)
+-const ONLINE_JOBS_READY := false
+ const NOTICE_TIME := 4.0
+ 
+ var _held: Dictionary[int, float] = {}
+@@ -66,9 +65,6 @@ func _slot_text(slot: int) -> String:
+ 
+ 
+ func _on_slot_interacted(_player_id: int, slot: int) -> void:
+-	if not ONLINE_JOBS_READY and NetworkManager.peer_count() > 1:
+-		_say("Online jobs aren't ready yet - disconnect to play together on this computer")
+-		return
+ 	if SaveManager.has_run(slot):
+ 		GameFlow.continue_run(slot)
+ 	else:
+diff --git a/scripts/world/walkable_area.gd b/scripts/world/walkable_area.gd
+index f08c621..dbb6d69 100644
+--- a/scripts/world/walkable_area.gd
++++ b/scripts/world/walkable_area.gd
+@@ -83,7 +83,7 @@ func _on_player_states_received(peer_id: int, states: Array) -> void:
+ 		# Only accept states for players that peer actually owns.
+ 		if player == null or player.is_local or not allowed.has(player.player_id):
+ 			continue
+-		player.apply_net_state(state[1], state[3], state[4], state[5])
++		player.apply_net_state(state[1], state[3], state[4], state[5], state[2])
+ 
+ 
+ func _find_player(player_id: int) -> Player:

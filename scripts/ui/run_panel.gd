@@ -45,8 +45,8 @@ func close() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# ui_cancel is Esc on the keyboard and B on a gamepad.
-	if visible and event.is_action_pressed("ui_cancel"):
+	var key := event as InputEventKey
+	if visible and key and key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
 		close()
 		get_viewport().set_input_as_handled()
 
@@ -57,29 +57,29 @@ func _show_details() -> void:
 	assert(state != null, "RunPanel opened for empty slot %d" % _slot)
 
 	_content.add_child(UIKit.label("SLOT %d" % _slot, UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 60)
-	grid.add_theme_constant_override("v_separation", 10)
+	var grid := UIKit.stat_grid()
 	_content.add_child(grid)
-	_add_row(grid, "Day", str(state.day))
-	_add_row(grid, "Wallet", UIKit.money(state.wallet))
-	_add_row(grid, "Contracts completed", str(state.contracts_completed))
-	_add_row(grid, "Total earned", UIKit.money(state.total_earned))
-	_add_row(grid, "Damage costs", UIKit.money(state.total_damage))
-	_add_row(grid, "Running costs", UIKit.money(state.total_overhead))
-	_add_row(grid, "Best day", UIKit.money(state.best_day))
+	UIKit.add_stat(grid, "Day", str(state.day), UIKit.GOLD)
+	UIKit.add_stat(grid, "Wallet", UIKit.money(state.wallet), UIKit.GOLD)
+	UIKit.add_stat(grid, "Contracts completed", str(state.contracts_completed))
+	UIKit.add_stat(grid, "Total earned", UIKit.money(state.total_earned))
+	UIKit.add_stat(grid, "Damage costs", UIKit.money(state.total_damage),
+		UIKit.PINK if state.total_damage > 0.5 else UIKit.CREAM)
+	UIKit.add_stat(grid, "Running costs", UIKit.money(state.total_overhead))
+	UIKit.add_stat(grid, "Best day", UIKit.money(state.best_day))
 	if not state.perks.is_empty():
-		_add_row(grid, "Perks", ", ".join(state.perks))
-	_add_row(grid, "Modifiers", RunModifiers.names(state.modifiers) if not state.modifiers.is_empty() else "None yet")
+		UIKit.add_stat(grid, "Perks", ", ".join(state.perks))
+	UIKit.add_stat(grid, "Modifiers", RunModifiers.names(state.modifiers) if not state.modifiers.is_empty() else "None yet")
 	var saved := SaveManager.slot_saved_at(_slot)
 	if saved > 0:
-		_add_row(grid, "Last saved", Time.get_datetime_string_from_unix_time(saved, true).substr(0, 16))
+		UIKit.add_stat(grid, "Last saved", Time.get_datetime_string_from_unix_time(saved, true).substr(0, 16))
 
-	var continue_button := _button("Continue", func() -> void: continue_requested.emit(_slot))
+	# Continue is the primary action and starts focused; Delete is kept apart from it.
+	var continue_button := UIKit.button("Continue", func() -> void: continue_requested.emit(_slot), true)
 	_content.add_child(continue_button)
-	_content.add_child(_button("Delete run", _show_confirm))
-	_content.add_child(_button("Back", close))
+	_content.add_child(UIKit.button("Delete run", _show_confirm))
+	_content.add_child(UIKit.button("Back", close))
+	_content.add_child(UIKit.label("Esc to go back", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
 	continue_button.grab_focus.call_deferred()
 
 
@@ -91,11 +91,13 @@ func _show_confirm() -> void:
 	var warning := UIKit.label("Day %d, %s in the wallet. This cannot be undone." % [state.day, UIKit.money(state.wallet)],
 		UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
 	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warning.add_theme_color_override("font_color", UIKit.PINK)
 	_content.add_child(warning)
 
-	var keep := _button("Keep it", _show_details)
+	# The safe choice is first and focused, so a stray press never deletes a run.
+	var keep := UIKit.button("Keep it", _show_details, true)
 	_content.add_child(keep)
-	_content.add_child(_button("Delete", _delete))
+	_content.add_child(UIKit.button("Delete", _delete))
 	keep.grab_focus.call_deferred()
 
 
@@ -110,17 +112,3 @@ func _clear() -> void:
 	for child in _content.get_children():
 		_content.remove_child(child)
 		child.queue_free()
-
-
-func _add_row(grid: GridContainer, left: String, right: String) -> void:
-	var l := UIKit.label(left, UIKit.FONT_BODY)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_child(l)
-	grid.add_child(UIKit.label(right, UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_RIGHT))
-
-
-func _button(text: String, on_pressed: Callable) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.pressed.connect(on_pressed)
-	return button

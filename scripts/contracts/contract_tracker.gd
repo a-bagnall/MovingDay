@@ -5,10 +5,9 @@ class_name ContractTracker
 
 signal contract_finished(result: Dictionary)
 
-const PAR_TIME := Balance.PAR_TIME               ## Seconds under which a time bonus is earned.
-const TIME_BONUS_RATE := Balance.TIME_BONUS_RATE   ## Dollars per second under par.
+const PAR_TIME := 120.0        ## Seconds under which a time bonus is earned.
+const TIME_BONUS_RATE := 2.0   ## Dollars per second under par.
 const FIRST_DAY_DEBUG_ITEM := "Box"
-const LOW_TIME_WARNING := Balance.LOW_TIME_WARNING   ## The day clock turns pink under this many seconds.
 
 var zone: DeliveryZone
 var required: Array[Furniture] = []
@@ -21,8 +20,7 @@ var _delivered_value: Label
 var _damage_value: Label
 var _time_value: Label
 var _day_value: Label
-var _hint_label: Label
-var _hint_extra := ""
+var _delivered_bar: ProgressBar
 
 
 func setup(delivery_zone: DeliveryZone, items: Array[Furniture], job_contract: Contract = null) -> void:
@@ -31,7 +29,7 @@ func setup(delivery_zone: DeliveryZone, items: Array[Furniture], job_contract: C
 
 	# Keep day one deliberately simple while the progression loop is being tested.
 	# Retain the lightweight, single-player Box and remove the other spawned items.
-	if Balance.DAY_ONE_SINGLE_ITEM and SaveManager.run != null and SaveManager.run.day == 1:
+	if SaveManager.run != null and SaveManager.run.day == 1:
 		var debug_item: Furniture
 		for item in items:
 			if item.data != null and item.data.display_name == FIRST_DAY_DEBUG_ITEM:
@@ -69,20 +67,10 @@ func _build_ui() -> void:
 	bar.add_theme_constant_override("separation", 24)
 	bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	column.add_child(bar)
-	_delivered_value = _add_chip(bar, "DELIVERED")
+	_delivered_value = _add_chip(bar, "DELIVERED", true)
 	_damage_value = _add_chip(bar, "DAMAGE")
 	_time_value = _add_chip(bar, "JOB TIME")
 	_day_value = _add_chip(bar, "DAY LEFT")
-
-	# Active modifiers stay on screen as small tags, so a bad run is never a mystery.
-	var run := SaveManager.run
-	if run != null and not run.modifiers.is_empty():
-		var tags := HBoxContainer.new()
-		tags.add_theme_constant_override("separation", 16)
-		tags.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		for id in run.modifiers:
-			tags.add_child(UIKit.chip(RunModifiers.modifier_name(id)))
-		column.add_child(tags)
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -92,27 +80,13 @@ func _build_ui() -> void:
 	var hint := PanelContainer.new()
 	hint.theme_type_variation = &"NotePanel"
 	hint.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	_hint_label = UIKit.label("", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel")
-	hint.add_child(_hint_label)
-	_refresh_hint()
+	hint.add_child(UIKit.label("Grab / drop: %s\nLift: %s\nAction: %s\nHeave-ho: %s" % [
+		UIKit.INTERACT_KEYS, UIKit.LIFT_KEYS, UIKit.ACTION_KEYS, UIKit.HEAVE_KEYS],
+		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel"))
 	column.add_child(hint)
 
 
-## The bottom note: the grab prompt, then how many pairs of items are stuck together.
-## (The run's modifiers are the tags under the top bar.)
-func _refresh_hint() -> void:
-	var text := "Grab / drop: %s\nHold %s to lift\nShove (hands free), or hold and release %s to throw a light item" % [
-		UIKit.INTERACT_KEYS, UIKit.LIFT_KEYS, UIKit.ACTION_KEYS]
-	text += "\nTwo of you carrying: press %s together for a heave-ho" % UIKit.HEAVE_KEYS
-	var sticky := get_tree().get_first_node_in_group("sticky_links") as StickyLinks if is_inside_tree() else null
-	if sticky != null and sticky.pairs_made > 0:
-		text += "\nStuck together: %d pair%s (look for the pink gum)" % [sticky.pairs_made, "" if sticky.pairs_made == 1 else "s"]
-	if text != _hint_extra:
-		_hint_extra = text
-		_hint_label.text = text
-
-
-func _add_chip(bar: HBoxContainer, caption: String) -> Label:
+func _add_chip(bar: HBoxContainer, caption: String, with_progress: bool = false) -> Label:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(400, 0)
 	var box := VBoxContainer.new()
@@ -121,6 +95,9 @@ func _add_chip(bar: HBoxContainer, caption: String) -> Label:
 	box.add_child(UIKit.label(caption, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
 	var value := UIKit.label("", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(value)
+	if with_progress:
+		_delivered_bar = UIKit.progress_bar(UIKit.SUCCESS)
+		box.add_child(_delivered_bar)
 	bar.add_child(panel)
 	return value
 
@@ -129,7 +106,6 @@ func _process(delta: float) -> void:
 	if finished or zone == null:
 		return
 	elapsed += delta
-	_refresh_hint()
 
 	var delivered := zone.delivered_items.size()
 	var damage := total_damage()
@@ -137,10 +113,14 @@ func _process(delta: float) -> void:
 	_damage_value.text = UIKit.money(damage)
 	_time_value.text = UIKit.format_time(elapsed)
 	_day_value.text = UIKit.format_time(GameFlow.day_time_remaining)
-	_day_value.add_theme_color_override("font_color",
-		UIKit.PINK if GameFlow.day_time_remaining < LOW_TIME_WARNING else UIKit.CREAM)
 	_damage_value.add_theme_color_override("font_color",
 		UIKit.PINK if damage > 0.5 else UIKit.CREAM)
+	_delivered_bar.max_value = maxf(float(required.size()), 1.0)
+	_delivered_bar.value = float(delivered)
+	# The day clock turns gold, then pink, as it runs down.
+	var day_left := GameFlow.day_time_remaining
+	_day_value.add_theme_color_override("font_color",
+		UIKit.PINK if day_left < 60.0 else (UIKit.GOLD if day_left < 120.0 else UIKit.CREAM))
 
 	# The host decides when the job is over; clients follow it to the briefing.
 	if delivered >= required.size() and required.size() > 0 and GameFlow.is_authority():
@@ -160,15 +140,15 @@ func _finish() -> void:
 	var delivered := zone.delivered_items.size()
 	var damage := total_damage()
 	var completion := float(delivered) / float(maxi(required.size(), 1))
-	var base := (contract.payout if contract else 500.0) * completion * RunModifiers.pay_multiplier()
+	var base := contract.payout * completion if contract else 500.0 * completion
 	var time_bonus := maxf(0.0, PAR_TIME - elapsed) * TIME_BONUS_RATE
 	var style_rate := 0.0
 	if SaveManager.profile != null:
 		match SaveManager.profile.equipped_outfit:
 			"workwear":
-				style_rate = Balance.WORKWEAR_STYLE_BONUS
+				style_rate = 0.10
 			"enchanted_workwear":
-				style_rate = Balance.ENCHANTED_WORKWEAR_STYLE_BONUS
+				style_rate = 0.15
 	var style_bonus := (base + time_bonus) * style_rate
 	var payment := maxf(0.0, base + time_bonus + style_bonus - damage)
 	var result := {

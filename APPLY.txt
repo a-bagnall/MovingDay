@@ -1,0 +1,6 @@
+Option A (keeps the commit): from your MovingDay repo root
+    git am path/to/0001-feat-ui-professional-UI-overhaul-with-a-shared-compo.patch
+
+Option B: copy the scripts/ folder in this zip over your repo's scripts/ folder, then
+    git add -A
+    git commit   (message is inside the .patch file)

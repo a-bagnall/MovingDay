@@ -38,13 +38,6 @@ func _ready() -> void:
 	reconcile_players()
 
 
-## NetworkManager outlives this room. Stop listening once the room leaves the tree: a
-## message arriving before the room is freed would otherwise find get_tree() null.
-func _exit_tree() -> void:
-	NetworkManager.roster_changed.disconnect(reconcile_players)
-	NetworkManager.player_states_received.disconnect(_on_player_states_received)
-
-
 func _physics_process(delta: float) -> void:
 	_poll_zone_presses()
 	_stream_local_players(delta)
@@ -90,10 +83,7 @@ func _on_player_states_received(peer_id: int, states: Array) -> void:
 		# Only accept states for players that peer actually owns.
 		if player == null or player.is_local or not allowed.has(player.player_id):
 			continue
-		var character: int = CharacterCatalog.clamp_index(state[6]) if (state as Array).size() > 6 else -1
-		var buttons: int = int(state[7]) if (state as Array).size() > 7 else 0
-		var color: int = CharacterCatalog.clamp_color(state[8]) if (state as Array).size() > 8 else -1
-		player.apply_net_state(state[1], state[3], state[4], state[5], state[2], character, buttons, color)
+		player.apply_net_state(state[1], state[3], state[4], state[5], state[2])
 
 
 func _find_player(player_id: int) -> Player:
@@ -167,12 +157,7 @@ func _build_hud(title: String) -> Label:
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(column)
 
-	var banner := PanelContainer.new()
-	banner.theme_type_variation = &"BannerPanel"
-	banner.custom_minimum_size = Vector2(1300, 0)
-	banner.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	banner.add_child(UIKit.label(title, UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
-	column.add_child(banner)
+	column.add_child(UIKit.banner(title, 1300.0))
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL

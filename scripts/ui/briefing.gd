@@ -43,42 +43,28 @@ func _build_ui() -> void:
 	root.add_child(center)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 18)
+	column.add_theme_constant_override("separation", UIKit.SPACE_M)
 	column.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	center.add_child(column)
 
-	var banner := PanelContainer.new()
-	banner.theme_type_variation = &"BannerPanel"
-	banner.custom_minimum_size = Vector2(2700, 0)
-	banner.add_child(UIKit.label("DISPATCH OFFICE", UIKit.FONT_TITLE, HORIZONTAL_ALIGNMENT_CENTER))
-	column.add_child(banner)
+	column.add_child(UIKit.banner("DISPATCH OFFICE", 2700.0))
 
-	var subtitle := "DAY %d  |  %s REMAINING  |  %d CONTRACTS COMPLETED" % [
-		SaveManager.run.day,
-		UIKit.format_time(GameFlow.day_time_remaining),
-		GameFlow.day_contract_count,
-	]
-	column.add_child(UIKit.label(subtitle, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
-	var run_notes := PackedStringArray()
-	if not SaveManager.run.modifiers.is_empty():
-		run_notes.append("MODIFIERS: %s" % RunModifiers.names(SaveManager.run.modifiers).to_upper())
-	if GameFlow.current_contract != null and StickyLinks.pair_count(SaveManager.run.day) > 0:
-		run_notes.append("HEADS UP: SOME ITEMS ARE STUCK TOGETHER")
-	if not run_notes.is_empty():
-		column.add_child(UIKit.label("  |  ".join(run_notes), UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+	# Day status as three chips: scannable at a glance, not one long run-on line.
+	var status := HBoxContainer.new()
+	status.add_theme_constant_override("separation", UIKit.SPACE_M)
+	status.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	status.add_child(UIKit.chip("DAY %d" % SaveManager.run.day, UIKit.GOLD))
+	status.add_child(UIKit.chip("%s LEFT" % UIKit.format_time(GameFlow.day_time_remaining), UIKit.CREAM))
+	status.add_child(UIKit.chip("%d DONE" % GameFlow.day_contract_count, UIKit.CREAM))
+	column.add_child(status)
 
 	var panels := HBoxContainer.new()
-	panels.add_theme_constant_override("separation", 20)
+	panels.add_theme_constant_override("separation", UIKit.SPACE_M)
 	column.add_child(panels)
 	panels.add_child(_build_previous_panel())
 	panels.add_child(_build_next_panel())
 
-	var prompt := PanelContainer.new()
-	prompt.theme_type_variation = &"ButtonPanel"
-	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_continue_label = UIKit.label("Press %s to skip the letter" % UIKit.INTERACT_KEYS, UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
-	prompt.add_child(_continue_label)
-	column.add_child(prompt)
+	_continue_label = UIKit.key_prompt(column, "Press %s to skip the letter" % UIKit.INTERACT_KEYS)
 
 
 func _contract_label(text: String, size: int = UIKit.FONT_BODY,
@@ -88,73 +74,93 @@ func _contract_label(text: String, size: int = UIKit.FONT_BODY,
 	return label
 
 
+## A receipt table in the paper font: muted labels, values on the right.
+func _receipt() -> GridContainer:
+	var grid := UIKit.stat_grid()
+	grid.add_theme_constant_override("v_separation", 8)
+	return grid
+
+
+func _receipt_row(grid: GridContainer, left: String, right: String,
+		color: Color = UIKit.CREAM) -> void:
+	UIKit.add_stat(grid, left, right, color, UIKit.paper_font())
+
+
 func _build_previous_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(1340, 1000)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
+	column.add_theme_constant_override("separation", UIKit.SPACE_S)
 	panel.add_child(column)
 
 	column.add_child(_contract_label("PREVIOUS PROPERTY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
 	if GameFlow.previous_contract_result.is_empty():
 		column.add_child(_contract_label("FIRST JOB OF THE DAY", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER))
-		column.add_child(_contract_label("No previous property completed yet.\n\nYour team's results will appear here after each move.", UIKit.FONT_BODY))
+		var empty := _contract_label("No previous property completed yet.\n\nYour team's results will appear here after each move.", UIKit.FONT_BODY)
+		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		column.add_child(empty)
 		return panel
 
 	var result := GameFlow.previous_contract_result
-	var receipt := _contract_label("PROPERTY %02d\n%s\n--------------------------------\nItems delivered: %s\nCompletion: %d%%\nTime: %s\nBase pay: %s\nTime bonus: +%s\nStyle bonus: +%s\nDamage: -%s\n--------------------------------\nPAYMENT: %s" % [
-		GameFlow.day_contract_count,
-		str(result.get("client_name", "Previous client")),
-		str(result.get("items_delivered", "-")),
-		roundi(float(result.get("completion", 0.0)) * 100.0),
-		UIKit.format_time(float(result.get("time", 0.0))),
-		UIKit.money(float(result.get("base_pay", 0.0))),
-		UIKit.money(float(result.get("time_bonus", 0.0))),
-		UIKit.money(float(result.get("style_bonus", 0.0))),
-		UIKit.money(float(result.get("damage", 0.0))),
-		UIKit.money(float(result.get("payment", 0.0))),
-	])
-	receipt.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(receipt)
+	column.add_child(_contract_label("PROPERTY %02d  |  %s" % [
+		GameFlow.day_contract_count, str(result.get("client_name", "Previous client"))],
+		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+	column.add_child(HSeparator.new())
+
+	var rows := _receipt()
+	column.add_child(rows)
+	_receipt_row(rows, "Items delivered", str(result.get("items_delivered", "-")))
+	_receipt_row(rows, "Completion", "%d%%" % roundi(float(result.get("completion", 0.0)) * 100.0))
+	_receipt_row(rows, "Time", UIKit.format_time(float(result.get("time", 0.0))))
+	_receipt_row(rows, "Base pay", UIKit.money(float(result.get("base_pay", 0.0))))
+	_receipt_row(rows, "Time bonus", "+" + UIKit.money(float(result.get("time_bonus", 0.0))), UIKit.SUCCESS)
+	_receipt_row(rows, "Style bonus", "+" + UIKit.money(float(result.get("style_bonus", 0.0))), UIKit.SUCCESS)
+	var damage := float(result.get("damage", 0.0))
+	_receipt_row(rows, "Damage", "-" + UIKit.money(damage), UIKit.PINK if damage > 0.5 else UIKit.CREAM)
+
+	column.add_child(HSeparator.new())
+	var total := _receipt()
+	column.add_child(total)
+	_receipt_row(total, "PAYMENT", UIKit.money(float(result.get("payment", 0.0))), UIKit.GOLD)
 	return panel
 
 
 func _build_next_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(1340, 1000)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
+	column.add_theme_constant_override("separation", UIKit.SPACE_S)
 	panel.add_child(column)
 
 	if GameFlow.current_contract == null:
 		column.add_child(_contract_label("END OF DAY", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-		column.add_child(_contract_label("No more contracts today. Your team has finished the shift.", UIKit.FONT_BODY))
-		column.add_child(_contract_label("DAY TOTAL", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-		var take_home := float(GameFlow.day_total.get("payment", 0.0))
-		var overhead := GameFlow.overhead_for_day(SaveManager.run.day)
-		var wallet_after := SaveManager.run.wallet + take_home - overhead
-		column.add_child(_contract_label("Contracts completed: %d\nTotal base pay: %s\nTime bonuses: %s\nStyle bonuses: %s\nDamage costs: -%s\n\nTAKE-HOME: %s\nRunning costs: -%s\nWALLET AFTER: %s" % [
-			int(GameFlow.day_total.get("contracts_completed", 0)),
-			UIKit.money(float(GameFlow.day_total.get("base_pay", 0.0))),
-			UIKit.money(float(GameFlow.day_total.get("time_bonus", 0.0))),
-			UIKit.money(float(GameFlow.day_total.get("style_bonus", 0.0))),
-			UIKit.money(float(GameFlow.day_total.get("damage", 0.0))),
-			UIKit.money(take_home),
-			UIKit.money(overhead),
-			UIKit.money(wallet_after),
-		], UIKit.FONT_BODY))
-		if wallet_after < 0.0:
-			var warning := _contract_label("THE COMPANY CANNOT COVER ITS COSTS.\nThis run ends when you continue.", UIKit.FONT_BODY)
-			warning.add_theme_color_override("font_color", UIKit.PINK)
-			column.add_child(warning)
+		var done := _contract_label("No more contracts today. Your team has finished the shift.", UIKit.FONT_BODY)
+		done.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		column.add_child(done)
+		column.add_child(HSeparator.new())
+		column.add_child(_contract_label("DAY TOTAL", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
+		var rows := _receipt()
+		column.add_child(rows)
+		_receipt_row(rows, "Contracts completed", str(int(GameFlow.day_total.get("contracts_completed", 0))))
+		_receipt_row(rows, "Total base pay", UIKit.money(float(GameFlow.day_total.get("base_pay", 0.0))))
+		_receipt_row(rows, "Time bonuses", "+" + UIKit.money(float(GameFlow.day_total.get("time_bonus", 0.0))), UIKit.SUCCESS)
+		_receipt_row(rows, "Style bonuses", "+" + UIKit.money(float(GameFlow.day_total.get("style_bonus", 0.0))), UIKit.SUCCESS)
+		var damage := float(GameFlow.day_total.get("damage", 0.0))
+		_receipt_row(rows, "Damage costs", "-" + UIKit.money(damage), UIKit.PINK if damage > 0.5 else UIKit.CREAM)
+		column.add_child(HSeparator.new())
+		var total := _receipt()
+		column.add_child(total)
+		_receipt_row(total, "TAKE-HOME", UIKit.money(float(GameFlow.day_total.get("payment", 0.0))), UIKit.GOLD)
 		return panel
 
 	var contract := GameFlow.current_contract
 	column.add_child(_contract_label("NEXT JOB", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
-	column.add_child(_contract_label("CONTRACT %02d  |  OFFER: %s" % [contract.contract_number, UIKit.money(contract.payout)], UIKit.FONT_SMALL))
+	column.add_child(_contract_label("CONTRACT %02d  |  OFFER: %s" % [contract.contract_number, UIKit.money(contract.payout)],
+		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
 	column.add_child(_contract_label("To: Moving team\nFrom: %s" % contract.client_name, UIKit.FONT_BODY))
-	var divider := HSeparator.new()
-	column.add_child(divider)
+	column.add_child(HSeparator.new())
 	_letter = _contract_label("")
 	_letter.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_letter.size_flags_vertical = Control.SIZE_EXPAND_FILL
