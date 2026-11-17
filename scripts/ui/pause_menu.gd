@@ -67,6 +67,10 @@ func _open() -> void:
 
 
 func _close() -> void:
+	# Remember a manually resized window as well as sizes chosen in Settings.
+	if not GameSettings.fullscreen:
+		GameSettings.windowed_resolution = DisplayServer.window_get_size()
+		GameSettings.save()
 	_is_open = false
 	InputSetup.ui_captured = _was_captured
 	if _paused_by_us:
@@ -186,6 +190,8 @@ func _device_card(title: String, source: int, description: String, card_width: f
 func _show_settings() -> void:
 	_page = &"settings"
 	_reset(CARD_WIDTH)
+	if not GameSettings.fullscreen:
+		GameSettings.windowed_resolution = DisplayServer.window_get_size()
 	_content.add_child(UIKit.label("SETTINGS", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
 
 	var volume_row := _row("Master volume")
@@ -212,9 +218,6 @@ func _show_settings() -> void:
 	mode_picker.add_item("Fullscreen", 1)
 	mode_picker.select(1 if GameSettings.fullscreen else 0)
 	mode_picker.custom_minimum_size.x = 520
-	mode_picker.item_selected.connect(func(index: int) -> void:
-		_set_fullscreen(index == 1)
-		resolution_picker.disabled = index == 1)
 	mode_row.add_child(mode_picker)
 
 	var resolution_row := _row("Window size")
@@ -232,6 +235,9 @@ func _show_settings() -> void:
 	resolution_picker.item_selected.connect(func(index: int) -> void:
 		_set_window_resolution(index))
 	resolution_row.add_child(resolution_picker)
+	mode_picker.item_selected.connect(func(index: int) -> void:
+		_set_fullscreen(index == 1)
+		resolution_picker.disabled = index == 1)
 
 	_add_toggle("VSync", GameSettings.vsync_enabled, _set_vsync)
 	_add_toggle("Reduce motion", GameSettings.reduce_motion, _set_reduce_motion)
