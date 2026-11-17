@@ -38,8 +38,6 @@ func open() -> void:
 	InputSetup.ui_captured = true
 	_status = ""
 	_refresh()
-	if _address_edit:
-		_address_edit.grab_focus()
 
 
 func close() -> void:
@@ -50,8 +48,8 @@ func close() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	var key := event as InputEventKey
-	if visible and key and key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
+	# ui_cancel is Esc on the keyboard and B on a gamepad.
+	if visible and event.is_action_pressed("ui_cancel"):
 		close()
 		get_viewport().set_input_as_handled()
 
@@ -76,6 +74,17 @@ func _refresh() -> void:
 		var status := UIKit.label(_status, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER)
 		status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_content.add_child(status)
+	if visible:
+		_focus_first_button.call_deferred()
+
+
+## Puts the focus on the first button so a gamepad or keyboard can act at once.
+func _focus_first_button() -> void:
+	for child in _content.get_children():
+		var button := child as Button
+		if button:
+			button.grab_focus()
+			return
 
 
 func _build_offline() -> void:
@@ -88,6 +97,10 @@ func _build_offline() -> void:
 	_address_edit.text = _address_text
 	_address_edit.add_theme_font_size_override("font_size", UIKit.FONT_BODY)
 	_address_edit.text_changed.connect(func(text: String) -> void: _address_text = text)
+	# Gamepad players type with the system on-screen keyboard where there is one (Steam Deck).
+	_address_edit.focus_entered.connect(func() -> void:
+		if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD) and not Input.get_connected_joypads().is_empty():
+			DisplayServer.virtual_keyboard_show(_address_edit.text))
 	_address_edit.text_submitted.connect(func(_text: String) -> void: _on_join_pressed())
 	_content.add_child(_address_edit)
 	_content.add_child(_button("Join game", _on_join_pressed))
@@ -208,7 +221,7 @@ func _on_join_failed() -> void:
 	_status = "Could not connect to the host"
 	_refresh()
 	if visible and _address_edit:
-		_address_edit.grab_focus()
+		_address_edit.grab_focus.call_deferred()
 
 
 func _on_connection_lost() -> void:

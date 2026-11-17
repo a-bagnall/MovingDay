@@ -35,12 +35,14 @@ var _players: Array[int] = []   # source of each local player, in join order
 ## Online the host hands the ids out (see NetworkManager), so a machine's players can
 ## be, say, 1 and 4. 0 means "joined, but the host has not given an id yet".
 var _ids: Array[int] = []
-## True while a typing UI is open: keyboard sources then read as idle, so typing
-## an address does not walk anyone around. Gamepads are unaffected.
+## True while a menu card is open: every source (keyboard and gamepad) then reads as
+## idle, so navigating the card does not walk anyone around or press interact pads.
+## The card itself is driven by Godot's UI focus (d-pad, stick, A, B).
 var ui_captured := false
 
 
 func _ready() -> void:
+	_ensure_gamepad_ui_events()
 	for source: int in KEYS.keys():
 		for action: String in ACTIONS:
 			var action_name := _action(source, action)
@@ -50,6 +52,31 @@ func _ready() -> void:
 			if source == KB_ARROWS and RIGHT_SIDE_ONLY.has(KEYS[source][action]):
 				key_event.location = KEY_LOCATION_RIGHT
 			InputMap.action_add_event(action_name, key_event)
+
+
+## Menus run on Godot's ui_* actions. Make sure each has its gamepad button even if the
+## engine defaults leave one out: A accepts, B goes back, d-pad moves the focus.
+func _ensure_gamepad_ui_events() -> void:
+	var wanted := {
+		"ui_accept": JOY_BUTTON_A,
+		"ui_cancel": JOY_BUTTON_B,
+		"ui_up": JOY_BUTTON_DPAD_UP,
+		"ui_down": JOY_BUTTON_DPAD_DOWN,
+		"ui_left": JOY_BUTTON_DPAD_LEFT,
+		"ui_right": JOY_BUTTON_DPAD_RIGHT,
+	}
+	for action: String in wanted:
+		if not InputMap.has_action(action):
+			continue
+		var has_button := false
+		for event in InputMap.action_get_events(action):
+			var pad := event as InputEventJoypadButton
+			if pad and pad.button_index == wanted[action]:
+				has_button = true
+		if not has_button:
+			var button := InputEventJoypadButton.new()
+			button.button_index = wanted[action]
+			InputMap.action_add_event(action, button)
 
 
 func available_sources() -> Array[int]:
@@ -122,9 +149,9 @@ func reset_ids() -> void:
 
 
 func get_move(source: int) -> Vector2:
+	if ui_captured:
+		return Vector2.ZERO
 	if source < 0:
-		if ui_captured:
-			return Vector2.ZERO
 		return Input.get_vector(
 			_action(source, "left"), _action(source, "right"),
 			_action(source, "up"), _action(source, "down"))
@@ -135,9 +162,9 @@ func get_move(source: int) -> Vector2:
 
 
 func is_interact_pressed(source: int) -> bool:
+	if ui_captured:
+		return false
 	if source < 0:
-		if ui_captured:
-			return false
 		return Input.is_action_pressed(_action(source, "interact"))
 	return Input.is_joy_button_pressed(source, JOY_BUTTON_A)
 
@@ -145,9 +172,9 @@ func is_interact_pressed(source: int) -> bool:
 ## Whether `button` ("lift", "action", "ping" or "heave") is held for `source`. Gamepad: left
 ## trigger is lift, X is action, Y is ping, B is heave-ho.
 func is_button_pressed(source: int, button: String) -> bool:
+	if ui_captured:
+		return false
 	if source < 0:
-		if ui_captured:
-			return false
 		return Input.is_action_pressed(_action(source, button))
 	match button:
 		"lift":
