@@ -87,6 +87,18 @@ func available_sources() -> Array[int]:
 	return out
 
 
+## Compact source label used by lobby and main-menu player status.
+func short_name(source: int) -> String:
+	match source:
+		KB_WASD:
+			return "Keyboard 1 (WASD)"
+		KB_ARROWS:
+			return "Keyboard 2 (Arrows)"
+		_:
+			var pad_name := Input.get_joy_name(source)
+			return pad_name if not pad_name.is_empty() else "Gamepad"
+
+
 func describe(source: int) -> String:
 	match source:
 		KB_WASD:
