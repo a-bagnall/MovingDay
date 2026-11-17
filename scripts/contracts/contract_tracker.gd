@@ -72,7 +72,7 @@ func _build_ui() -> void:
 	hint.theme_type_variation = &"NotePanel"
 	hint.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	hint.add_child(UIKit.label("Grab / drop: %s\nLift: %s\nAction: %s\nHeave-ho: %s" % [
-		UIKit.INTERACT_KEYS, UIKit.LIFT_KEYS, UIKit.ACTION_KEYS, UIKit.HEAVE_KEYS],
+		UIKit.interact_keys_text(), UIKit.LIFT_KEYS, UIKit.ACTION_KEYS, UIKit.HEAVE_KEYS],
 		UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel"))
 	column.add_child(hint)
 

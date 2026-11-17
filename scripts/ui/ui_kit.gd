@@ -204,15 +204,94 @@ static func key_prompt(parent: Control, text: String, show_devices := true) -> L
 	row.add_theme_constant_override("separation", SPACE_S)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	if show_devices:
-		row.add_child(device_image(InputSetup.KB_WASD, Vector2(150, 72)))
+		row.add_child(input_glyph(InputSetup.KB_WASD, "interact"))
+		row.add_child(input_glyph(InputSetup.KB_ARROWS, "interact"))
 		var pads := Input.get_connected_joypads()
 		var pad_source: int = pads[0] if not pads.is_empty() else -99
-		row.add_child(device_image(pad_source, Vector2(150, 72)))
+		row.add_child(input_glyph(pad_source, "interact"))
 	var l := label(text, FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
 	row.add_child(l)
 	panel.add_child(row)
 	parent.add_child(panel)
 	return l
+
+
+static func interact_keys_text() -> String:
+	var pads := Input.get_connected_joypads()
+	var pad_source: int = pads[0] if not pads.is_empty() else -99
+	return "E, Enter or gamepad %s" % controller_button_label(pad_source, "interact")
+
+
+static func _controller_family(source: int) -> String:
+	if source < 0:
+		return "keyboard"
+	var name := Input.get_joy_name(source).to_lower()
+	if name.contains("playstation") or name.contains("dualshock") or name.contains("dualsense") \
+			or name.contains("sony") or name.contains("ps4") or name.contains("ps5") \
+			or name.contains("wireless controller"):
+		return "playstation"
+	if name.contains("switch") or name.contains("nintendo") or name.contains("joy-con") \
+			or name.contains("joycon") or name.contains("pro controller"):
+		return "switch"
+	if name.contains("xbox") or name.contains("x-input") or name.contains("xinput") \
+			or name.contains("microsoft"):
+		return "xbox"
+	return "generic"
+
+
+static func controller_button_label(source: int, action: String) -> String:
+	var family := _controller_family(source)
+	match action:
+		"move":
+			return "L-STICK"
+		"lift":
+			return "L2" if family == "playstation" else ("ZL" if family == "switch" else ("LT" if family == "xbox" else "L-TRIG"))
+		"interact":
+			return "×" if family == "playstation" else ("B" if family == "switch" else "A")
+		"action":
+			return "□" if family == "playstation" else ("Y" if family == "switch" else "X")
+		"ping":
+			return "△" if family == "playstation" else ("X" if family == "switch" else "Y")
+		"heave":
+			return "○" if family == "playstation" else ("A" if family == "switch" else "B")
+	return "?"
+
+
+static func _keyboard_key_label(source: int, action: String) -> String:
+	if action == "move":
+		return "W A S D" if source == InputSetup.KB_WASD else "↑ ↓ ← →"
+	var key: int = InputSetup.KEYS[source].get(action, 0)
+	match key:
+		KEY_SPACE: return "SPACE"
+		KEY_ENTER: return "ENTER"
+		KEY_SHIFT: return "R-SHIFT" if source == InputSetup.KB_ARROWS else "SHIFT"
+		KEY_CTRL: return "R-CTRL" if source == InputSetup.KB_ARROWS else "CTRL"
+		KEY_SLASH: return "/"
+		KEY_PERIOD: return "."
+	return OS.get_keycode_string(key).to_upper()
+
+
+static func input_glyph(source: int, action: String) -> PanelContainer:
+	var caption := _keyboard_key_label(source, action) if source < 0 else controller_button_label(source, action)
+	var glyph := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("fffbe8") if source < 0 else Color("ffe58a")
+	style.border_color = BROWN_DARK
+	style.set_border_width_all(4)
+	if source >= 0 and ["interact", "action", "ping", "heave"].has(action):
+		style.set_corner_radius_all(36)
+	else:
+		style.set_corner_radius_all(10)
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
+	glyph.add_theme_stylebox_override("panel", style)
+	var text_label := label(caption, FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER)
+	text_label.add_theme_color_override("font_color", BROWN_DARK)
+	glyph.add_child(text_label)
+	glyph.custom_minimum_size = Vector2(116 if caption.length() > 5 else 76, 68)
+	return glyph
 
 
 ## A thin progress bar in the UI palette. `fill` colours the bar.
@@ -255,16 +334,14 @@ static func style_label3d(label: Label3D) -> void:
 ## Unknown controllers use the minimal universal illustration.
 static func device_texture(source: int) -> Texture2D:
 	var path := "controller_minimal.png"
-	if source == InputSetup.KB_WASD or source == InputSetup.KB_ARROWS:
-		path = "kb_dark_all.png"
-	elif source >= 0:
-		var device_name := Input.get_joy_name(source).to_lower()
-		if device_name.contains("playstation") or device_name.contains("dualshock") \
-				or device_name.contains("dualsense") or device_name.contains("sony"):
+	match _controller_family(source):
+		"keyboard":
+			path = "kb_dark_all.png"
+		"playstation":
 			path = "controller_ps.png"
-		elif device_name.contains("switch") or device_name.contains("nintendo"):
+		"switch":
 			path = "controller_switch.png"
-		elif device_name.contains("xbox") or device_name.contains("x-input"):
+		"xbox":
 			path = "controller_xbox.png"
 	return load(INPUT_ART + path) as Texture2D
 

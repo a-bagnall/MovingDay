@@ -192,4 +192,5 @@ func _device_name(source: int) -> String:
 	if source == InputSetup.KB_ARROWS:
 		return "Keyboard\nArrows + Enter"
 	var name := Input.get_joy_name(source)
-	return "Controller\n%s" % (name if not name.is_empty() else "Gamepad")
+	var device := name if not name.is_empty() else "Gamepad"
+	return "%s\n%s to interact" % [device, UIKit.controller_button_label(source, "interact")]

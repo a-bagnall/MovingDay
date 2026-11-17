@@ -136,9 +136,9 @@ func _show_controls() -> void:
 
 		var bindings := VBoxContainer.new()
 		bindings.add_theme_constant_override("separation", 6)
-		bindings.add_child(UIKit.chip("WASD  ·  " + key_text(InputSetup.KB_WASD, row["action"]), UIKit.CREAM))
-		bindings.add_child(UIKit.chip("ARROWS  ·  " + key_text(InputSetup.KB_ARROWS, row["action"]), UIKit.CREAM))
-		bindings.add_child(UIKit.chip("PAD  ·  " + str(row["pad"]), UIKit.GOLD))
+		bindings.add_child(_binding_row("WASD", InputSetup.KB_WASD, str(row["action"])))
+		bindings.add_child(_binding_row("ARROWS", InputSetup.KB_ARROWS, str(row["action"])))
+		bindings.add_child(_binding_row("PAD", pad_source, str(row["action"])))
 		body.add_child(bindings)
 		grid.add_child(card)
 
@@ -147,6 +147,16 @@ func _show_controls() -> void:
 	var back := UIKit.button("Back", _show_main, true)
 	_content.add_child(back)
 	back.grab_focus.call_deferred()
+
+
+func _binding_row(device: String, source: int, action: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var caption := UIKit.label(device, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_LEFT, &"MutedLabel")
+	caption.custom_minimum_size.x = 210
+	row.add_child(caption)
+	row.add_child(UIKit.input_glyph(source, action))
+	return row
 
 
 func _device_card(title: String, source: int, description: String) -> PanelContainer:

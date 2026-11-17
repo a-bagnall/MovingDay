@@ -110,6 +110,6 @@ func _build_ui() -> void:
 		record.add_theme_color_override("font_color", UIKit.MUTED)
 	column.add_child(record)
 
-	var text := "Press %s to return to the main menu" % UIKit.INTERACT_KEYS if GameFlow.is_authority() \
+	var text := "Press %s to return to the main menu" % UIKit.interact_keys_text() if GameFlow.is_authority() \
 		else "Waiting for the host to continue"
 	_prompt = UIKit.key_prompt(column, text, GameFlow.is_authority())

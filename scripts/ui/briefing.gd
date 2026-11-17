@@ -64,7 +64,7 @@ func _build_ui() -> void:
 	panels.add_child(_build_previous_panel())
 	panels.add_child(_build_next_panel())
 
-	_continue_label = UIKit.key_prompt(column, "Press %s to skip the letter" % UIKit.INTERACT_KEYS)
+	_continue_label = UIKit.key_prompt(column, "Press %s to skip the letter" % UIKit.interact_keys_text())
 
 
 func _contract_label(text: String, size: int = UIKit.FONT_BODY,
@@ -199,7 +199,7 @@ func _poll_interact() -> void:
 
 func _continue_prompt() -> String:
 	var what := "start the next job" if GameFlow.current_contract != null else "finish the day"
-	return "Press %s to %s" % [UIKit.INTERACT_KEYS, what]
+	return "Press %s to %s" % [UIKit.interact_keys_text(), what]
 
 
 func _continue() -> void:
