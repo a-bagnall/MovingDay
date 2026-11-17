@@ -162,27 +162,28 @@ func _build_hud(title: String) -> Label:
 	var note_content := VBoxContainer.new()
 	note_content.add_theme_constant_override("separation", UIKit.SPACE_S)
 	note.add_child(note_content)
-	note_content.add_child(UIKit.label("ROOM CONTROLS", UIKit.FONT_SMALL,
-		HORIZONTAL_ALIGNMENT_LEFT, &"MutedLabel"))
-
-	# The main-menu join instruction uses the same keycap artwork as the rest
-	# of the game's prompts instead of a long, device-specific sentence.
-	if title == "MOVING DAY!":
+	var is_main_menu := title == "MOVING DAY!"
+	if is_main_menu:
+		# Minimal join hint: just the actual input glyphs and one action word.
 		var join_row := HBoxContainer.new()
 		join_row.add_theme_constant_override("separation", UIKit.SPACE_S)
 		join_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 		join_row.add_child(UIKit.input_glyph(InputSetup.KB_WASD, "interact"))
 		join_row.add_child(UIKit.input_glyph(InputSetup.KB_ARROWS, "interact"))
 		var pads := Input.get_connected_joypads()
-		var pad_source: int = pads[0] if not pads.is_empty() else 0
-		join_row.add_child(UIKit.input_glyph(pad_source, "interact"))
+		if not pads.is_empty():
+			join_row.add_child(UIKit.input_glyph(pads[0], "interact"))
 		join_row.add_child(UIKit.label("JOIN", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel"))
 		note_content.add_child(join_row)
+	else:
+		note_content.add_child(UIKit.label("ROOM CONTROLS", UIKit.FONT_SMALL,
+			HORIZONTAL_ALIGNMENT_LEFT, &"MutedLabel"))
 
 	var status := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel")
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.custom_minimum_size.x = 720
-	note_content.add_child(status)
+	if not is_main_menu:
+		note_content.add_child(status)
 	column.add_child(note)
 
 	var spacer := Control.new()
