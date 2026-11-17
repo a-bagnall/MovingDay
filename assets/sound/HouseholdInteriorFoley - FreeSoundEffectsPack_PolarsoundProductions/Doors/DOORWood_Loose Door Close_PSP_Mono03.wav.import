@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://b52p8hph2df02"
+path="res://.godot/imported/DOORWood_Loose Door Close_PSP_Mono03.wav-792fa8973a6a712e0043f7d0b8a7b1cf.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Doors/DOORWood_Loose Door Close_PSP_Mono03.wav"
+dest_files=["res://.godot/imported/DOORWood_Loose Door Close_PSP_Mono03.wav-792fa8973a6a712e0043f7d0b8a7b1cf.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

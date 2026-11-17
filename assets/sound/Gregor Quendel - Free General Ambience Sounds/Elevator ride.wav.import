@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://cxnm626hndx61"
+path="res://.godot/imported/Elevator ride.wav-c9bfff85e713054ebb724404b2728a62.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/Elevator ride.wav"
+dest_files=["res://.godot/imported/Elevator ride.wav-c9bfff85e713054ebb724404b2728a62.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://dwrkbdowekikc"
+path="res://.godot/imported/Thunder - Lightning - II - Without rain, wind, background noise.wav-0d324d7b613f22e58bf961fcfffe63b9.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/Thunder - Lightning - II - Without rain, wind, background noise.wav"
+dest_files=["res://.godot/imported/Thunder - Lightning - II - Without rain, wind, background noise.wav-0d324d7b613f22e58bf961fcfffe63b9.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

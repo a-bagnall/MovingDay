@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://bw8no0c7mkt4d"
+path="res://.godot/imported/Crowd - School excursion.wav-16ed19dfce60f9b3ba154dd979f711dd.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/Crowd - School excursion.wav"
+dest_files=["res://.godot/imported/Crowd - School excursion.wav-16ed19dfce60f9b3ba154dd979f711dd.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

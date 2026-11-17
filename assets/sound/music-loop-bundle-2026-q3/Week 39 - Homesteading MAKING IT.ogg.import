@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://dw2ytch0203at"
+path="res://.godot/imported/Week 39 - Homesteading MAKING IT.ogg-2d95408f27b76cd53e696efa9e18bd55.oggvorbisstr"
+
+[deps]
+
+source_file="res://assets/sound/music-loop-bundle-2026-q3/Week 39 - Homesteading MAKING IT.ogg"
+dest_files=["res://.godot/imported/Week 39 - Homesteading MAKING IT.ogg-2d95408f27b76cd53e696efa9e18bd55.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

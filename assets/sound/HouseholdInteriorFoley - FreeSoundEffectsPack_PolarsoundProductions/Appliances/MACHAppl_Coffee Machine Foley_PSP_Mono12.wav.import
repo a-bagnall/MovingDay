@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://bn8fmrhvdvenc"
+path="res://.godot/imported/MACHAppl_Coffee Machine Foley_PSP_Mono12.wav-0cb0fbaf95fe1deb3fc03d40d81c8a50.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Appliances/MACHAppl_Coffee Machine Foley_PSP_Mono12.wav"
+dest_files=["res://.godot/imported/MACHAppl_Coffee Machine Foley_PSP_Mono12.wav-0cb0fbaf95fe1deb3fc03d40d81c8a50.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

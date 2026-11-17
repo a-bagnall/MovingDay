@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://b4bw8s3ktg8lu"
+path="res://.godot/imported/Crowd - Cheering - Rhythmic cheering.wav-8071311021879dd66560a4da956892cb.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/Crowd - Cheering - Rhythmic cheering.wav"
+dest_files=["res://.godot/imported/Crowd - Cheering - Rhythmic cheering.wav-8071311021879dd66560a4da956892cb.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

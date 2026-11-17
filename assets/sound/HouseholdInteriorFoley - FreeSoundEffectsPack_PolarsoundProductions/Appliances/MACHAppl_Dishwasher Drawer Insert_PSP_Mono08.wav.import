@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://cqpisitnu441r"
+path="res://.godot/imported/MACHAppl_Dishwasher Drawer Insert_PSP_Mono08.wav-58d422a38aa2d91f45e9f2e3f08410cd.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Appliances/MACHAppl_Dishwasher Drawer Insert_PSP_Mono08.wav"
+dest_files=["res://.godot/imported/MACHAppl_Dishwasher Drawer Insert_PSP_Mono08.wav-58d422a38aa2d91f45e9f2e3f08410cd.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

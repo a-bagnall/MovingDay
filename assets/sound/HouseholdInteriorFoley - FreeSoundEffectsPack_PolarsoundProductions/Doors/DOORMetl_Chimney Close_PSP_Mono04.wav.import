@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://bvfjc7rt3or7d"
+path="res://.godot/imported/DOORMetl_Chimney Close_PSP_Mono04.wav-6f904367c18e124bb7b772c1b54a27da.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Doors/DOORMetl_Chimney Close_PSP_Mono04.wav"
+dest_files=["res://.godot/imported/DOORMetl_Chimney Close_PSP_Mono04.wav-6f904367c18e124bb7b772c1b54a27da.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

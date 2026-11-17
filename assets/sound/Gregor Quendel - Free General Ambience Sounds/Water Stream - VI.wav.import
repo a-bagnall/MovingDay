@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://b6t1v3c55la6l"
+path="res://.godot/imported/Water Stream - VI.wav-516c0a1f039efb1836c675667a6d7e00.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/Water Stream - VI.wav"
+dest_files=["res://.godot/imported/Water Stream - VI.wav-516c0a1f039efb1836c675667a6d7e00.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

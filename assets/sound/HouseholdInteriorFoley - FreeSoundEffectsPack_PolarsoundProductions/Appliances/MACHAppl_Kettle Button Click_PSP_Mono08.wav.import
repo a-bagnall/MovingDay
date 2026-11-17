@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://cby64n1j2odxh"
+path="res://.godot/imported/MACHAppl_Kettle Button Click_PSP_Mono08.wav-ac4f4d5098fddf442a1fe6c5ab369e31.sample"
+
+[deps]
+
+source_file="res://assets/sound/HouseholdInteriorFoley - FreeSoundEffectsPack_PolarsoundProductions/Appliances/MACHAppl_Kettle Button Click_PSP_Mono08.wav"
+dest_files=["res://.godot/imported/MACHAppl_Kettle Button Click_PSP_Mono08.wav-ac4f4d5098fddf442a1fe6c5ab369e31.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

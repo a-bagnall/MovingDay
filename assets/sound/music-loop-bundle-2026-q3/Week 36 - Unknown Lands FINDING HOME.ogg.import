@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://ce00vj6fr043"
+path="res://.godot/imported/Week 36 - Unknown Lands FINDING HOME.ogg-67a273f8dbcd7e6a48b69510692d0b84.oggvorbisstr"
+
+[deps]
+
+source_file="res://assets/sound/music-loop-bundle-2026-q3/Week 36 - Unknown Lands FINDING HOME.ogg"
+dest_files=["res://.godot/imported/Week 36 - Unknown Lands FINDING HOME.ogg-67a273f8dbcd7e6a48b69510692d0b84.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

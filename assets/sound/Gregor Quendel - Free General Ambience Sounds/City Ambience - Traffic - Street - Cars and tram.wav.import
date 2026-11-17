@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://b3dbklxrge5kl"
+path="res://.godot/imported/City Ambience - Traffic - Street - Cars and tram.wav-c1162a907720c05063bb95af925faac5.sample"
+
+[deps]
+
+source_file="res://assets/sound/Gregor Quendel - Free General Ambience Sounds/City Ambience - Traffic - Street - Cars and tram.wav"
+dest_files=["res://.godot/imported/City Ambience - Traffic - Street - Cars and tram.wav-c1162a907720c05063bb95af925faac5.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2
