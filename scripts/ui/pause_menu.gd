@@ -175,7 +175,8 @@ func _device_card(title: String, source: int, description: String, card_width: f
 	column.add_theme_constant_override("separation", UIKit.SPACE_S)
 	card.add_child(column)
 	column.add_child(UIKit.label(title, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER))
-	column.add_child(UIKit.device_image(source, Vector2(card_width - 80.0, 210)))
+	var illustration_width := minf(card_width - 80.0, 620.0)
+	column.add_child(UIKit.device_image(source, Vector2(illustration_width, 210)))
 	var caption := UIKit.label(description, UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel")
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(caption)
@@ -187,26 +188,57 @@ func _show_settings() -> void:
 	_reset(CARD_WIDTH)
 	_content.add_child(UIKit.label("SETTINGS", UIKit.FONT_BIG, HORIZONTAL_ALIGNMENT_CENTER))
 
-	var volume_value := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
-	volume_value.custom_minimum_size.x = 260
-	var set_volume := func(delta: float) -> void:
-		GameSettings.master_volume = clampf(snappedf(GameSettings.master_volume + delta, VOLUME_STEP), 0.0, 1.0)
+	var volume_row := _row("Master volume")
+	var volume_value := UIKit.label("%d%%" % roundi(GameSettings.master_volume * 100.0), UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_RIGHT)
+	volume_value.custom_minimum_size.x = 180
+	var volume_slider := HSlider.new()
+	volume_slider.min_value = 0.0
+	volume_slider.max_value = 1.0
+	volume_slider.step = 0.05
+	volume_slider.value = GameSettings.master_volume
+	volume_slider.custom_minimum_size = Vector2(560, 64)
+	volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	volume_slider.value_changed.connect(func(value: float) -> void:
+		GameSettings.master_volume = value
 		GameSettings.apply()
 		GameSettings.save()
-		volume_value.text = "%d%%" % roundi(GameSettings.master_volume * 100.0)
-	var volume_row := _row("Volume")
-	var down := UIKit.button("-", func() -> void: set_volume.call(-VOLUME_STEP), false, 120)
-	volume_row.add_child(down)
+		volume_value.text = "%d%%" % roundi(value * 100.0))
+	volume_row.add_child(volume_slider)
 	volume_row.add_child(volume_value)
-	volume_row.add_child(UIKit.button("+", func() -> void: set_volume.call(VOLUME_STEP), false, 120))
-	set_volume.call(0.0)   # shows the current value
 
-	_add_toggle("Fullscreen", GameSettings.fullscreen, _set_fullscreen)
+	var mode_row := _row("Display mode")
+	var mode_picker := OptionButton.new()
+	mode_picker.add_item("Windowed", 0)
+	mode_picker.add_item("Fullscreen", 1)
+	mode_picker.select(1 if GameSettings.fullscreen else 0)
+	mode_picker.custom_minimum_size.x = 520
+	mode_picker.item_selected.connect(func(index: int) -> void:
+		_set_fullscreen(index == 1)
+		resolution_picker.disabled = index == 1)
+	mode_row.add_child(mode_picker)
+
+	var resolution_row := _row("Window size")
+	var resolution_picker := OptionButton.new()
+	for resolution: Vector2i in GameSettings.RESOLUTIONS:
+		resolution_picker.add_item("%d × %d" % [resolution.x, resolution.y])
+	var current_resolution := GameSettings.windowed_resolution
+	var selected_resolution := 1
+	for i in range(GameSettings.RESOLUTIONS.size()):
+		if GameSettings.RESOLUTIONS[i] == current_resolution:
+			selected_resolution = i
+	resolution_picker.select(selected_resolution)
+	resolution_picker.custom_minimum_size.x = 520
+	resolution_picker.disabled = GameSettings.fullscreen
+	resolution_picker.item_selected.connect(func(index: int) -> void:
+		_set_window_resolution(index))
+	resolution_row.add_child(resolution_picker)
+
+	_add_toggle("VSync", GameSettings.vsync_enabled, _set_vsync)
 	_add_toggle("Reduce motion", GameSettings.reduce_motion, _set_reduce_motion)
 
 	var back := UIKit.button("Back", _show_main, true)
 	_content.add_child(back)
-	_content.add_child(UIKit.label("B / Esc to go back", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
+	_content.add_child(UIKit.label("Windowed mode can also be resized by dragging its edges", UIKit.FONT_SMALL, HORIZONTAL_ALIGNMENT_CENTER, &"MutedLabel"))
 	back.grab_focus.call_deferred()
 
 
@@ -289,6 +321,20 @@ func _add_toggle(title: String, value: bool, setter: Callable) -> void:
 
 func _set_fullscreen(value: bool) -> void:
 	GameSettings.fullscreen = value
+	GameSettings.apply()
+	GameSettings.save()
+
+
+func _set_window_resolution(index: int) -> void:
+	if index < 0 or index >= GameSettings.RESOLUTIONS.size():
+		return
+	GameSettings.windowed_resolution = GameSettings.RESOLUTIONS[index]
+	GameSettings.apply()
+	GameSettings.save()
+
+
+func _set_vsync(value: bool) -> void:
+	GameSettings.vsync_enabled = value
 	GameSettings.apply()
 	GameSettings.save()
 
