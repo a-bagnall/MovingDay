@@ -9,7 +9,8 @@ class_name CharacterCatalog
 
 ## `style` shapes the procedural animation so each plushie moves differently (see
 ## Player._animate_character): rate (step speed), bob (hop height), roll (waddle), leg/arm
-## (swing), twist (hip sway), nod (head bob), sync (both legs together, like a bunny).
+## (swing), twist (hip sway), nod (head bob), knee (bend, default 1), sync (both legs together,
+## like a bunny).
 const ENTRIES: Array[Dictionary] = [
 	{"name": "Bear", "path": "res://assets/characters/Animal Plushies/FBX/Bear.fbx", "height": 0.72, "yaw": PI, "style": {"rate": 0.8, "bob": 0.8, "roll": 1.5, "leg": 0.8, "arm": 0.7, "twist": 1.0, "nod": 0.6}},
 	{"name": "Bunny", "path": "res://assets/characters/Animal Plushies/FBX/Bunny.fbx", "height": 0.82, "yaw": PI, "style": {"rate": 0.75, "bob": 1.9, "roll": 0.3, "leg": 0.9, "arm": 0.9, "twist": 0.3, "nod": 1.5, "sync": true}},

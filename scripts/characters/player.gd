@@ -434,7 +434,7 @@ func _build_rig(skeleton: Skeleton3D) -> void:
 	_skeleton = skeleton
 	for i in skeleton.get_bone_count():
 		var bone_name := skeleton.get_bone_name(i)
-		for key in ["LLeg1", "RLeg1", "LLeg2", "RLeg2", "LArm1", "RArm1", "LArm2", "RArm2", "Head", "Chest"]:
+		for key in ["LLeg1", "RLeg1", "LLeg2", "RLeg2", "LLegAnkle", "RLegAnkle", "LArm1", "RArm1", "LArm2", "RArm2", "Head", "Chest", "Hips"]:
 			if bone_name.ends_with(key):
 				var parent := skeleton.get_bone_parent(i)
 				var rest := skeleton.get_bone_global_rest(i)
@@ -445,6 +445,8 @@ func _build_rig(skeleton: Skeleton3D) -> void:
 					"parent_basis": parent_basis,
 					"global_basis": rest.basis.orthonormalized(),
 					"side": signf(rest.origin.x) if signf(rest.origin.x) != 0.0 else 1.0,
+					# Height of this bone above the floor in the rest pose (used by _ground_lock).
+					"rest_y": (_visual.global_transform.affine_inverse() * (skeleton.global_transform * rest.origin)).y,
 				}
 
 
@@ -502,8 +504,11 @@ func _animate_character(delta: float) -> void:
 
 	var w := _walk_blend
 	var swing := sin(_anim_time)
-	var hop := absf(swing)                                 # 0 at footfall, 1 at the top
-	var bob := hop * 0.045 * minf(s_bob, 1.0) * w
+	# `hop` is 0 when the body is at its lowest and 1 at its highest. The legs and the
+	# ground lock below already make the body dip on each step; this adds the cartoon
+	# bounce on top. A bunny (both legs together) really leaves the ground.
+	var hop := (0.5 - 0.5 * cos(_anim_time)) if in_sync else (0.5 - 0.5 * cos(2.0 * (_anim_time - 0.1 * PI)))
+	var bob := hop * (0.06 if in_sync else 0.012) * minf(s_bob, 1.5) * w
 	# Stretch tall on the way up, squash flat as the foot lands (a little overshoot
 	# on landing: the squash is deepest just after the footfall).
 	var squash := 1.0 + (hop - 0.45) * 0.055 * w
@@ -548,24 +553,35 @@ func _animate_character(delta: float) -> void:
 	# Keep idle motion restrained; no surprise hops or rapid wiggles.
 	_fidget_left = 0.0
 
-	_char_root.position.y = bob
+	_char_root.position.y = 0.0
 	_char_root.rotation = Vector3(-_anim_lean, _char_yaw, roll + _anim_bank)
 	var wide := 1.0 / sqrt(squash)
 	_char_root.scale = Vector3(wide, squash, wide)
 
 	if _skeleton == null:
 		return
-	# Legs: quick little steps, opposite each other (together for a hopping bunny), with
-	# the knee tucking up as each leg swings forward so the feet lift off the ground.
-	var leg_l := swing * 0.55 * minf(s_leg, 1.0) * w
-	var leg_r := (swing if in_sync else -swing) * 0.55 * minf(s_leg, 1.0) * w
-	_pose_bone("LLeg1", Basis(Vector3.RIGHT, leg_l))
-	_pose_bone("RLeg1", Basis(Vector3.RIGHT, leg_r))
-	var cos_phase := cos(_anim_time)
-	var knee_l := maxf(0.0, -cos_phase) * 0.4 * minf(s_leg, 1.0) * w
-	var knee_r := knee_l if in_sync else maxf(0.0, cos_phase) * 0.4 * minf(s_leg, 1.0) * w
-	_pose_bone("LLeg2", Basis(Vector3.RIGHT, knee_l))
-	_pose_bone("RLeg2", Basis(Vector3.RIGHT, knee_r))
+	# Legs: a real step cycle. Each leg has a phase (the other leg is half a cycle behind,
+	# or the same for a hopping bunny): hip swings, knee bends to take the weight and folds
+	# up through the swing, ankle keeps the foot flat and pushes off.
+	var leg_style := minf(s_leg, 1.2)
+	var knee_style: float = style.get("knee", 1.0)
+	var phase_l := _anim_time
+	var phase_r := _anim_time if in_sync else _anim_time + PI
+	var pose_l := _leg_pose(phase_l, leg_style, knee_style, w)
+	var pose_r := _leg_pose(phase_r, leg_style, knee_style, w)
+	_pose_bone("LLeg1", Basis(Vector3.RIGHT, pose_l.x))
+	_pose_bone("RLeg1", Basis(Vector3.RIGHT, pose_r.x))
+	_pose_bone("LLeg2", Basis(Vector3.RIGHT, pose_l.y))
+	_pose_bone("RLeg2", Basis(Vector3.RIGHT, pose_r.y))
+	_pose_bone("LLegAnkle", Basis(Vector3.RIGHT, pose_l.z))
+	_pose_bone("RLegAnkle", Basis(Vector3.RIGHT, pose_r.z))
+	# Pelvis turns with the stride (leading hip forward) and drops a little on the side of
+	# the leg that is swinging through; the chest turns back so the shoulders stay square.
+	var hip_cos := cos(_anim_time)
+	var twist_amount := minf(s_twist, 1.6)
+	_pose_bone("Hips", Basis(Vector3.UP, -hip_cos * 0.10 * twist_amount * w)
+		* Basis(Vector3.BACK, swing * 0.05 * w * (0.0 if in_sync else 1.0)))
+	_ground_lock(bob)
 	# Arms: hang down from the plushie T-pose, swing against the legs, bend at the
 	# elbow, and rise to hold the furniture when carrying.
 	for key in ["LArm1", "RArm1"]:
@@ -573,7 +589,7 @@ func _animate_character(delta: float) -> void:
 			continue
 		var is_left: bool = key == "LArm1"
 		var side: float = _rig[key]["side"]
-		var phase := swing if (in_sync or not is_left) else -swing
+		var phase := cos(_anim_time) if (in_sync or is_left) else -cos(_anim_time)   # opposite the leg on the same side
 		var idle_sway := sin(_idle_time * 1.7 + (0.0 if is_left else 1.4)) * 0.07 * idle
 		var drop := Basis(Vector3.BACK, -side * lerpf(1.15, 0.45, _carry_blend))
 		var raise := Basis(Vector3.RIGHT, phase * 0.4 * minf(s_arm, 1.0) * w + idle_sway - 0.95 * _carry_blend - 0.45 * _lift_blend - 1.3 * _shove_blend
@@ -586,8 +602,47 @@ func _animate_character(delta: float) -> void:
 	_pose_bone("Head", Basis(Vector3.UP, head_look) * Basis(Vector3.BACK, head_tilt - roll * 0.6 + sin(_idle_time * 1.3 + 1.0) * 0.1 * idle)
 		* Basis(Vector3.RIGHT, head_pitch - bob * 1.5 + nod))
 	# Chest: counter-twist as the hips swing, and a breath.
-	_pose_bone("Chest", Basis(Vector3.UP, -swing * 0.06 * minf(s_twist, 1.0) * w)
+	_pose_bone("Chest", Basis(Vector3.UP, hip_cos * 0.08 * twist_amount * w)
 		* Basis(Vector3.RIGHT, sin(_idle_time * 2.2) * 0.02 * idle))
+
+
+## Hip, knee and ankle angles (radians, model axes: positive swings the foot backwards) for
+## one leg at `phase` of its cycle, where 0 is the heel strike and PI is toe-off. Exaggerated
+## on purpose: the knee soaks up the landing, straightens through mid-stance, then folds
+## right up as the leg swings through.
+func _leg_pose(phase: float, leg_style: float, knee_style: float, walk: float) -> Vector3:
+	var cycle := fposmod(phase, TAU) / TAU          # 0..1, 0 = heel strike
+	var hip := -cos(phase) * 0.55 * leg_style
+	var knee := 0.0
+	if cycle < 0.5:    # stance: a soft bend straight after landing
+		var s := cycle * 2.0
+		knee = 0.30 * sin(PI * s) * (1.0 - s) * 2.0
+	else:              # swing: fold up, then straighten ready to land
+		var u := (cycle - 0.5) * 2.0
+		knee = 1.05 * sin(PI * pow(u, 0.75))
+	knee *= knee_style
+	# Keep the foot roughly flat, tip the toes down to push off, and dorsiflex a touch to land.
+	var toe_off := smoothstep(0.38, 0.5, cycle) * (1.0 - smoothstep(0.5, 0.62, cycle))
+	var ankle := -0.65 * (hip + knee) + 0.45 * toe_off
+	return Vector3(hip, knee, ankle) * walk
+
+
+## Lowers the body so the lowest foot rests on the floor, whatever the legs are doing, then
+## adds `extra` (the cartoon bounce). Measured from the posed ankle bones, so it works for
+## any pose and any model scale.
+func _ground_lock(extra: float) -> void:
+	var lowest := INF
+	var to_visual := _visual.global_transform.affine_inverse()
+	_skeleton.force_update_all_bone_transforms()
+	for key in ["LLegAnkle", "RLegAnkle"]:
+		if not _rig.has(key):
+			continue
+		var info: Dictionary = _rig[key]
+		var pos: Vector3 = to_visual * (_skeleton.global_transform * _skeleton.get_bone_global_pose(info["bone"]).origin)
+		lowest = minf(lowest, pos.y - float(info["rest_y"]))
+	if lowest == INF:
+		return
+	_char_root.position.y = clampf(-lowest, -0.05, 0.12) + extra
 
 
 ## Combined bounds of every mesh under `model`, in the model's own (unscaled) space.
