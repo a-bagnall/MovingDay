@@ -182,9 +182,18 @@ func _build_hud(title: String) -> Label:
 	var status := UIKit.label("", UIKit.FONT_BODY, HORIZONTAL_ALIGNMENT_LEFT, &"DarkLabel")
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.custom_minimum_size.x = 720
-	if not is_main_menu:
+	if is_main_menu:
+		note_content.add_child(UIKit.label("PARTY", UIKit.FONT_SMALL,
+			HORIZONTAL_ALIGNMENT_LEFT, &"MutedLabel"))
 		note_content.add_child(status)
-	column.add_child(note)
+	else:
+		note_content.add_child(status)
+
+	# Give the panel a little more breathing room from the centred title banner.
+	var note_offset := MarginContainer.new()
+	note_offset.add_theme_constant_override("margin_left", -48)
+	note_offset.add_child(note)
+	column.add_child(note_offset)
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
